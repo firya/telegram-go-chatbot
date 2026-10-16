@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/celestix/gotgproto"
+	"github.com/gotd/td/tg"
 )
 
 // The MTProto client is built in a background goroutine (main.go), so the
@@ -183,4 +185,91 @@ func TestProtoRetry(t *testing.T) {
 	if attempts != 2 {
 		t.Errorf("protoRetry attempts = %d, want 2", attempts)
 	}
+}
+
+// TestProtoConnectTimeout: gotgproto.NewClient retries the datacenter
+// connection forever, so a connect attempt that never gets a socket must
+// report an error instead of blocking the init goroutine in silence.
+func TestProtoConnectTimeout(t *testing.T) {
+	oldTimeout, oldConfig := protoConnectTimeout, Config
+	t.Cleanup(func() {
+		protoConnectTimeout, Config = oldTimeout, oldConfig
+		setGoTGProtoClient(nil, nil)
+	})
+
+	// Credentials that can never authorise, so the attempt can only fail.
+	protoConnectTimeout = 300 * time.Millisecond
+	Config = &Configuration{}
+
+	started := time.Now()
+	client, ctx, stop, err := connectProtoClient()
+	elapsed := time.Since(started)
+	if stop != nil {
+		stop()
+	}
+
+	if client != nil || ctx != nil {
+		t.Errorf("connectProtoClient returned a client for unusable credentials: %v", client)
+	}
+	if err == nil {
+		t.Fatal("connectProtoClient returned no error")
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("connectProtoClient took %v, want it to return promptly", elapsed)
+	}
+	t.Logf("connectProtoClient reported: %v", err)
+}
+
+// TestMtprotoConnectProbe connects to Telegram with the credentials from
+// config.json and reports why the MTProto client is (not) coming up - the
+// commands answer "not connected" exactly while mtprotoAPI() is not ready.
+// It is skipped by default: PROTO_PROBE=1 go test -run TestMtprotoConnectProbe -v
+func TestMtprotoConnectProbe(t *testing.T) {
+	if os.Getenv("PROTO_PROBE") == "" {
+		t.Skip("set PROTO_PROBE=1 to connect to Telegram with config.json credentials")
+	}
+
+	oldConfig, oldTimeout := Config, protoConnectTimeout
+	t.Cleanup(func() {
+		Config, protoConnectTimeout = oldConfig, oldTimeout
+		setGoTGProtoClient(nil, nil)
+	})
+
+	if err := ConfigInit(); err != nil {
+		t.Fatalf("ConfigInit: %v", err)
+	}
+	t.Logf("config: app_id=%v app_hash=%v proxy=%q (proxy is a Bot API setting, MTProto ignores it)",
+		Config.AppID, Config.AppHash, Config.Proxy)
+
+	protoConnectTimeout = 30 * time.Second
+	client, protoCtx, stop, err := connectProtoClient()
+	if err != nil {
+		t.Fatalf("MTProto connect failed: %v", err)
+	}
+	t.Cleanup(stop)
+	setGoTGProtoClient(client, protoCtx)
+
+	api, protoCtx, ok := mtprotoAPI()
+	if !ok {
+		t.Fatal("mtprotoAPI() is not ready after a successful connect")
+	}
+
+	users, err := api.UsersGetUsers(protoCtx, []tg.InputUserClass{&tg.InputUserSelf{}})
+	if err != nil {
+		t.Fatalf("UsersGetUsers(self): %v", err)
+	}
+	if len(users) == 0 {
+		t.Fatal("UsersGetUsers(self) returned no user")
+	}
+	self, isUser := users[0].(*tg.User)
+	if !isUser {
+		t.Fatalf("UsersGetUsers(self) returned %T", users[0])
+	}
+	t.Logf("MTProto client is up: id=%v username=%v", self.ID, self.Username)
+
+	resolved, err := api.ContactsResolveUsername(protoCtx, &tg.ContactsResolveUsernameRequest{Username: "imacat"})
+	if err != nil {
+		t.Fatalf("ContactsResolveUsername(imacat): %v", err)
+	}
+	t.Logf("imacat resolved to %v chats", len(resolved.GetChats()))
 }

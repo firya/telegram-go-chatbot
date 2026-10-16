@@ -180,11 +180,10 @@ func main() {
 	BotDispatcher.AddHandler(handlers.NewInlineQuery(nil, GetInline))
 	BotDispatcher.AddHandler(handlers.NewReaction(reaction.ChatID(Config.Chat), OnReaction))
 
-	go func() {
-		if err := gotdClientInit(); err != nil {
-			slog.Error("MTProto client stopped", "error", err)
-		}
-	}()
+	// Keeps retrying on its own, and logs every failure: MTProto needs a
+	// direct connection to the Telegram datacenters, so it stays down when
+	// they are unreachable while the Bot API works through a tunnel.
+	go gotdClientInit()
 
 	BotUpdater.Idle()
 }
