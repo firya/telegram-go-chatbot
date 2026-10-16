@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -111,6 +112,109 @@ func TestGetInline(t *testing.T) {
 	results, ok := answers[0].Params["results"].([]gotgbot.InlineQueryResult)
 	if !ok || len(results) != 2 {
 		t.Fatalf("GetInline results = %v, want 2 results", answers[0].Params["results"])
+	}
+}
+
+// TestGetInlineTypes covers the inline results of every get type: each type is
+// offered as the cached inline result the Bot API expects for it, with the
+// stored file id in the matching field, and a type the bot cannot send leaves
+// the result empty.
+func TestGetInlineTypes(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	types := []string{"Animation", "Audio", "Photo", "Video", "Voice", "Document", "Text", "Sticker"}
+	for i, typ := range types {
+		if err := DB.Create(&Get{
+			Name:    fmt.Sprintf("typetest%d", i),
+			Title:   fmt.Sprintf("название %d", i),
+			Type:    typ,
+			Data:    fmt.Sprintf("fileid%d", i),
+			Caption: fmt.Sprintf("подпись %d", i),
+			Creator: 100,
+		}).Error; err != nil {
+			t.Fatalf("seed %v get: %v", typ, err)
+		}
+	}
+
+	if err := GetInline(bot, testInlineContext(bot, testUser(42), "typetest")); err != nil {
+		t.Fatalf("GetInline (types): %v", err)
+	}
+	answers := client.callsFor("answerInlineQuery")
+	if len(answers) != 1 {
+		t.Fatalf("GetInline (types): answerInlineQuery calls = %d, want 1", len(answers))
+	}
+	results, ok := answers[0].Params["results"].([]gotgbot.InlineQueryResult)
+	if !ok || len(results) != len(types) {
+		t.Fatalf("GetInline (types) results = %v, want %d", answers[0].Params["results"], len(types))
+	}
+
+	for i, typ := range types {
+		fileID := fmt.Sprintf("fileid%d", i)
+		title := fmt.Sprintf("название %d", i)
+		caption := fmt.Sprintf("подпись %d", i)
+
+		switch r := results[i].(type) {
+		case *gotgbot.InlineQueryResultCachedGif:
+			if typ != "Animation" {
+				t.Errorf("GetInline (%v): result = %T, want the cached gif", typ, results[i])
+			}
+			if r.GifFileId != fileID || r.Title != title || r.Caption != caption {
+				t.Errorf("GetInline (%v) = %+v, want gif %v/%v/%v", typ, *r, fileID, title, caption)
+			}
+		case *gotgbot.InlineQueryResultCachedVoice:
+			if typ != "Voice" {
+				t.Errorf("GetInline (%v): result = %T, want the cached voice", typ, results[i])
+			}
+			if r.VoiceFileId != fileID || r.Title != title || r.Caption != caption {
+				t.Errorf("GetInline (%v) = %+v, want voice %v/%v/%v", typ, *r, fileID, title, caption)
+			}
+		case *gotgbot.InlineQueryResultCachedPhoto:
+			if typ != "Photo" {
+				t.Errorf("GetInline (%v): result = %T, want the cached photo", typ, results[i])
+			}
+			if r.PhotoFileId != fileID || r.Title != title || r.Caption != caption {
+				t.Errorf("GetInline (%v) = %+v, want photo %v/%v/%v", typ, *r, fileID, title, caption)
+			}
+		case *gotgbot.InlineQueryResultCachedVideo:
+			if typ != "Video" {
+				t.Errorf("GetInline (%v): result = %T, want the cached video", typ, results[i])
+			}
+			if r.VideoFileId != fileID || r.Title != title || r.Caption != caption {
+				t.Errorf("GetInline (%v) = %+v, want video %v/%v/%v", typ, *r, fileID, title, caption)
+			}
+		case *gotgbot.InlineQueryResultCachedDocument:
+			if typ != "Audio" && typ != "Document" {
+				t.Errorf("GetInline (%v): result = %T, want the cached document", typ, results[i])
+			}
+			if r.DocumentFileId != fileID || r.Title != title {
+				t.Errorf("GetInline (%v) = %+v, want document %v/%v", typ, *r, fileID, title)
+			}
+			// Audio carries the caption as the description, Document as the caption.
+			if typ == "Audio" && (r.Caption != "" || r.Description != caption) {
+				t.Errorf("GetInline (Audio) = %+v, want the caption as the description", *r)
+			}
+			if typ == "Document" && (r.Caption != caption || r.Description != caption) {
+				t.Errorf("GetInline (Document) = %+v, want the caption in both fields", *r)
+			}
+		case *gotgbot.InlineQueryResultArticle:
+			if typ != "Text" {
+				t.Errorf("GetInline (%v): result = %T, want the article", typ, results[i])
+			}
+			content, ok := r.InputMessageContent.(*gotgbot.InputTextMessageContent)
+			if !ok {
+				t.Errorf("GetInline (%v): content = %T, want the text content", typ, r.InputMessageContent)
+				continue
+			}
+			if content.MessageText != fileID || r.Title != title || r.Description != fileID {
+				t.Errorf("GetInline (%v) = %+v/%+v, want the stored text as the content", typ, *r, *content)
+			}
+		case nil:
+			if typ != "Sticker" {
+				t.Errorf("GetInline (%v): result = nil, want a cached result", typ)
+			}
+		default:
+			t.Errorf("GetInline (%v): result = %T, want a cached result", typ, results[i])
+		}
 	}
 }
 

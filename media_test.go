@@ -3,8 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -294,5 +297,164 @@ func TestMp3(t *testing.T) {
 	}
 	if calls := client.callsFor("sendAudio"); len(calls) != 0 {
 		t.Errorf("Mp3 (bad link): sendAudio calls = %d, want 0", len(calls))
+	}
+}
+
+// TestFFmpegRemoteMedia covers the branch of FFmpegConvert that every real
+// conversion takes: the Bot API answers with a file_path the process does not
+// have, so the file is downloaded from the Telegram file server over TLS,
+// converted, and the downloaded input is removed afterwards.
+func TestFFmpegRemoteMedia(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	source := ffmpegMedia(t, "video")
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("generated media: %v", err)
+	}
+
+	// A path under the temp dir that does not exist yet: FFmpegConvert creates
+	// the directory and downloads the file into it.
+	remote := filepath.Join(t.TempDir(), "remote", "video.mp4")
+	client.setResult("getFile", json.RawMessage(fmt.Sprintf(`{"file_path":%q,"file_size":%d}`, remote, len(data))))
+
+	oldToken := Config.Token
+	t.Cleanup(func() { Config.Token = oldToken })
+	Config.Token = "TESTTOKEN"
+
+	var mu sync.Mutex
+	var paths []string
+	stubTLSProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "api.telegram.org" {
+			http.Error(w, "unexpected host "+r.Host, http.StatusNotFound)
+			return
+		}
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		if !strings.Contains(r.URL.Path, "/file/botTESTTOKEN/") {
+			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		w.Write(data)
+	})
+
+	reply := &gotgbot.Message{Video: &gotgbot.Video{FileId: "vid1"}}
+	if err := Convert(bot, testReplyContext(bot, "/convert gif", testUser(42), reply)); err != nil {
+		t.Fatalf("Convert (remote file): %v", err)
+	}
+	if calls := client.callsFor("sendAnimation"); len(calls) != 1 {
+		t.Errorf("Convert (remote file): sendAnimation calls = %d, want 1", len(calls))
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(paths) == 0 {
+		t.Errorf("Convert (remote file): the Telegram file server was never asked, want a download")
+	}
+	for _, p := range paths {
+		if !strings.Contains(p, remote) {
+			t.Errorf("Convert (remote file): download path = %q, want it to end at %v", p, remote)
+		}
+	}
+
+	// The downloaded input is cleaned up like the conversion result.
+	if _, err := os.Stat(remote); !os.IsNotExist(err) {
+		t.Errorf("Convert (remote file): the downloaded input %v was left behind (stat: %v)", remote, err)
+	}
+}
+
+// TestFFmpegRemoteMediaFailure covers the two ways the download of a media file
+// ends in an error: the file server refuses the request, and the path the Bot
+// API returned is unstatable for a reason other than "missing" (its parent is a
+// regular file), which is not treated as a file to download.
+func TestFFmpegRemoteMediaFailure(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	oldToken := Config.Token
+	t.Cleanup(func() { Config.Token = oldToken })
+	Config.Token = "TESTTOKEN"
+
+	reply := &gotgbot.Message{Video: &gotgbot.Video{FileId: "vid1"}}
+
+	// The file server refuses: the conversion stops with the download error.
+	remote := filepath.Join(t.TempDir(), "remote", "video.mp4")
+	client.setResult("getFile", json.RawMessage(fmt.Sprintf(`{"file_path":%q,"file_size":1}`, remote)))
+	stubTLSProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "file reference has expired", http.StatusNotFound)
+	})
+
+	if err := Convert(bot, testReplyContext(bot, "/convert gif", testUser(42), reply)); err == nil {
+		t.Errorf("Convert (expired file): err = nil, want the download error")
+	}
+	if calls := client.callsFor("sendAnimation"); len(calls) != 0 {
+		t.Errorf("Convert (expired file): sendAnimation calls = %d, want 0", len(calls))
+	}
+
+	// The parent of the path is a regular file: os.Stat reports ENOTDIR, which
+	// is not os.ErrNotExist, so nothing is downloaded and nothing is converted.
+	notadir := filepath.Join(t.TempDir(), "notadir")
+	if err := os.WriteFile(notadir, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write stub file: %v", err)
+	}
+	client.setResult("getFile", json.RawMessage(fmt.Sprintf(`{"file_path":%q,"file_size":1}`, filepath.Join(notadir, "video.mp4"))))
+	client.clearCalls()
+
+	if err := Convert(bot, testReplyContext(bot, "/convert gif", testUser(42), reply)); err == nil {
+		t.Errorf("Convert (unstatable path): err = nil, want the stat error")
+	}
+	if calls := client.callsFor("sendAnimation"); len(calls) != 0 {
+		t.Errorf("Convert (unstatable path): sendAnimation calls = %d, want 0", len(calls))
+	}
+}
+
+// TestLoopAnimation covers the /loop conversion itself: the looped animation
+// for the default target and for an explicit argument, and the arguments the
+// command refuses before ffmpeg is started. The typing goroutine keeps sending
+// chat actions while ffmpeg works, so the action count is a lower bound.
+func TestLoopAnimation(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	for _, c := range []struct {
+		name string
+		cmd  string
+	}{
+		{"animation reply", "/loop"},
+		{"animation argument", "/loop animation"},
+	} {
+		client.clearCalls()
+		fakeMediaFile(t, client, ffmpegMedia(t, "video_only"))
+
+		if err := Loop(bot, testReplyContext(bot, c.cmd, testUser(42),
+			&gotgbot.Message{Animation: &gotgbot.Animation{FileId: "anim1"}})); err != nil {
+			t.Errorf("Loop (%s): %v", c.name, err)
+			continue
+		}
+		if calls := client.callsFor("sendAnimation"); len(calls) != 1 {
+			t.Errorf("Loop (%s): sendAnimation calls = %d, want 1", c.name, len(calls))
+		}
+		if calls := client.callsFor("sendChatAction"); len(calls) < 1 {
+			t.Errorf("Loop (%s): sendChatAction calls = %d, want at least 1", c.name, len(calls))
+		}
+	}
+
+	// Only animations are looped: naming another target is refused, and
+	// nothing is sent.
+	for _, arg := range []string{"video", "mp3", "photo"} {
+		client.clearCalls()
+		fakeMediaFile(t, client, ffmpegMedia(t, "video_only"))
+
+		if err := Loop(bot, testReplyContext(bot, "/loop "+arg, testUser(42),
+			&gotgbot.Message{Animation: &gotgbot.Animation{FileId: "anim1"}})); err != nil {
+			t.Errorf("Loop (%s): %v", arg, err)
+			continue
+		}
+		texts := client.sentTexts()
+		if len(texts) != 1 || texts[0] != "Неподдерживаемая операция" {
+			t.Errorf("Loop (%s) sent %q, want the unsupported operation note", arg, texts)
+		}
+		if calls := client.callsFor("sendAnimation"); len(calls) != 0 {
+			t.Errorf("Loop (%s): sendAnimation calls = %d, want 0", arg, len(calls))
+		}
 	}
 }

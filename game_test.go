@@ -567,6 +567,45 @@ func TestDuelAcceptFull(t *testing.T) {
 	}
 }
 
+// TestDuelAcceptNotParticipant covers the accept pressed by anyone who is not
+// the challenged user: the callback is answered with a refusal from the pool,
+// and the duel never starts.
+func TestDuelAcceptNotParticipant(t *testing.T) {
+	bot, client := setupTestEnv(t)
+	resetDuelState(t)
+
+	player := gotgbot.User{Id: 42, FirstName: "Тест", LastName: "Пупкин", Username: "testpupkin"}
+	msg := testMessage("вызов", &player)
+	msg.Entities = []gotgbot.MessageEntity{{Type: "text_mention", User: &targetUser}, {Type: "text_mention", User: &player}}
+	busy["russianroulettePending"] = true
+
+	if err := Accept(bot, testCallbackContext(bot, msg, testUser(100))); err != nil {
+		t.Fatalf("Accept (not a participant): %v", err)
+	}
+
+	answers := client.callsFor("answerCallbackQuery")
+	if len(answers) != 1 || answers[0].Params["text"] != "нет" {
+		t.Errorf("Accept (not a participant) answers = %v, want the Nope answer", answers)
+	}
+	if calls := client.callsFor("editMessageText"); len(calls) != 0 {
+		t.Errorf("Accept (not a participant): editMessageText calls = %d, want the duel not started", len(calls))
+	}
+	if calls := client.callsFor("restrictChatMember"); len(calls) != 0 {
+		t.Errorf("Accept (not a participant): restrictChatMember calls = %d, want nobody restricted", len(calls))
+	}
+	var duelists []Duelist
+	DB.Find(&duelists)
+	if len(duelists) != 0 {
+		t.Errorf("Accept (not a participant): duelist rows = %v, want none", duelists)
+	}
+	if busy["russianrouletteInProgress"] {
+		t.Error("Accept (not a participant): duel should not be in progress")
+	}
+	if !busy["russianroulettePending"] {
+		t.Error("Accept (not a participant): the pending duel should stay pending")
+	}
+}
+
 // ---------- Ставки ----------
 
 func TestBet(t *testing.T) {

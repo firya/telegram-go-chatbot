@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
@@ -239,8 +240,8 @@ func TestSaveToPM(t *testing.T) {
 	}
 }
 
-// TestLoop covers the /loop argument validation (the ffmpeg conversion itself
-// is not testable here).
+// TestLoop covers the /loop argument validation. The conversion itself, with
+// real ffmpeg, is TestLoopAnimation in media_test.go.
 func TestLoop(t *testing.T) {
 	bot, client := setupTestEnv(t)
 
@@ -274,6 +275,25 @@ func TestLoop(t *testing.T) {
 	texts = client.sentTexts()
 	if len(texts) != 1 || !strings.Contains(texts[0], "Неподдерживаемая операция") {
 		t.Errorf("Loop (photo) sent %q, want unsupported-operation message", texts)
+	}
+}
+
+// TestGlobalMiddlewareAccessors covers the two questions the dispatcher asks a
+// middleware before running it: the name it is identified by, and whether it
+// wants the update. The global middleware takes everything, which is what
+// makes it see all updates.
+func TestGlobalMiddlewareAccessors(t *testing.T) {
+	bot, _ := setupTestEnv(t)
+
+	m := NewGlobalMiddleware()
+	if name := m.Name(); name != "global_middleware" {
+		t.Errorf("GlobalMiddleware.Name() = %q, want global_middleware", name)
+	}
+	if !m.CheckUpdate(bot, testContext(bot, "/ping", testUser(42))) {
+		t.Error("CheckUpdate (message) = false, want every update accepted")
+	}
+	if !m.CheckUpdate(bot, ext.NewContext(bot, &gotgbot.Update{UpdateId: 1}, nil)) {
+		t.Error("CheckUpdate (empty update) = false, want every update accepted")
 	}
 }
 
@@ -558,6 +578,124 @@ func TestBotInit(t *testing.T) {
 	}
 	if !strings.Contains(report.body, "Connection type: polling") {
 		t.Errorf("BotInit startup report = %q, want the connection type in it", report.body)
+	}
+}
+
+// TestBotInitWebhook starts the bot in webhook mode: the update endpoint is
+// listening before the webhook is set, the API is told the public URL with the
+// bot username as the path, and updates that do not carry the secret token the
+// server was started with are dropped.
+func TestBotInitWebhook(t *testing.T) {
+	setupTestEnv(t)
+
+	oldBot, oldDispatcher, oldUpdater, oldConfig := Bot, BotDispatcher, BotUpdater, Config
+
+	// StartWebhook listens synchronously, so the port picked here is the
+	// address the update endpoint answers on.
+	free, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("free port: %v", err)
+	}
+	listen := fmt.Sprintf("127.0.0.1:%d", free.Addr().(*net.TCPAddr).Port)
+	free.Close()
+
+	calls := &botAPICalls{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method := path.Base(r.URL.Path)
+		body, _ := io.ReadAll(r.Body)
+		calls.add(method, r.URL.Path, string(body))
+
+		w.Header().Set("Content-Type", "application/json")
+		switch method {
+		case "getMe":
+			fmt.Fprint(w, `{"ok":true,"result":{"id":42,"is_bot":true,"first_name":"test","username":"testbot"}}`)
+		case "sendMessage":
+			fmt.Fprint(w, `{"ok":true,"result":{"message_id":1,"date":1700000000,`+
+				`"chat":{"id":7,"type":"private","first_name":"sysadmin"},`+
+				`"from":{"id":42,"is_bot":true,"first_name":"test","username":"testbot"}}}`)
+		default:
+			fmt.Fprint(w, `{"ok":true,"result":true}`)
+		}
+	}))
+
+	// The same cleanup order as TestBotInit: stop the updater (which closes the
+	// webhook server), hand the globals back, close the API.
+	t.Cleanup(server.Close)
+	t.Cleanup(func() {
+		Bot, BotDispatcher, BotUpdater, Config = oldBot, oldDispatcher, oldUpdater, oldConfig
+	})
+	t.Cleanup(func() {
+		if BotUpdater != nil {
+			BotUpdater.Stop()
+		}
+		time.Sleep(300 * time.Millisecond)
+	})
+
+	Config.BotApiUrl = server.URL
+	Config.Token = "123:abc"
+	Config.AllowedUpdates = []string{"message"}
+	Config.SysAdmin = 7
+	Config.MaxConnections = 40
+	Config.EndpointPublicURL = "https://example.invalid/"
+	Config.Listen = listen
+	Bot, BotDispatcher, BotUpdater = nil, nil, nil
+
+	if err := BotInit(); err != nil {
+		t.Fatalf("BotInit (webhook): %v", err)
+	}
+
+	seen := waitForCallsContaining(t, calls, "getMe", "setWebhook", "sendMessage")
+	if hasCall(seen, "getUpdates") {
+		t.Errorf("BotInit (webhook): the API saw getUpdates, want no polling")
+	}
+
+	var webhook, report *botAPICall
+	for i, entry := range seen {
+		if entry.method == "setWebhook" {
+			webhook = &seen[i]
+		}
+		if entry.method == "sendMessage" {
+			report = &seen[i]
+		}
+	}
+	if webhook == nil {
+		t.Fatalf("BotInit (webhook): the API never saw setWebhook")
+	}
+	// The endpoint is the public URL from config.json with the bot username as
+	// the path, set with the secret token and the connection limit.
+	if !strings.Contains(webhook.body, "https://example.invalid/testbot") {
+		t.Errorf("BotInit (webhook) setWebhook = %q, want the endpoint under the public URL", webhook.body)
+	}
+	if !strings.Contains(webhook.body, "name=\"secret_token\"") {
+		t.Errorf("BotInit (webhook) setWebhook = %q, want the secret token in it", webhook.body)
+	}
+	if !strings.Contains(webhook.body, "name=\"max_connections\"\r\n\r\n40\r\n") {
+		t.Errorf("BotInit (webhook) setWebhook = %q, want max_connections 40", webhook.body)
+	}
+	if report == nil {
+		t.Fatalf("BotInit (webhook): no sendMessage to the sysadmin")
+	}
+	if !strings.Contains(report.body, "Connection type: webhook") {
+		t.Errorf("BotInit (webhook) startup report = %q, want the webhook connection type", report.body)
+	}
+
+	// The endpoint is live and enforces the secret: an update without the
+	// secret token header is dropped, a path of another bot is not served here.
+	post := func(p string) int {
+		t.Helper()
+		resp, err := http.Post("http://"+listen+p, "application/json",
+			strings.NewReader(`{"update_id":1,"message":{"message_id":1,"date":1700000000,"chat":{"id":7}}}`))
+		if err != nil {
+			t.Fatalf("webhook request to %v: %v", p, err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := post("/testbot"); code != http.StatusUnauthorized {
+		t.Errorf("webhook POST /testbot without the secret = %d, want 401", code)
+	}
+	if code := post("/otherbot"); code != http.StatusNotFound {
+		t.Errorf("webhook POST /otherbot = %d, want 404", code)
 	}
 }
 

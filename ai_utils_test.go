@@ -94,3 +94,27 @@ func TestCheckToolRestrictions(t *testing.T) {
 		}
 	}
 }
+
+// TestToPtr covers the helper that hands a value to the model schema as a
+// pointer: the pointer addresses a copy, so the caller's value is not aliased.
+func TestToPtr(t *testing.T) {
+	text := "картинка"
+	p := toPtr(text)
+	if p == nil {
+		t.Fatal("toPtr returned nil")
+	}
+	if *p != text {
+		t.Errorf("*toPtr = %q, want %q", *p, text)
+	}
+	if p == &text {
+		t.Error("toPtr aliases the argument, want a pointer to a copy")
+	}
+	*p = "изменено"
+	if text != "картинка" {
+		t.Errorf("the source became %q, want it untouched", text)
+	}
+
+	if n := toPtr(42); *n != 42 {
+		t.Errorf("*toPtr = %v, want 42", *n)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -366,5 +367,161 @@ func TestCurSymbolMaps(t *testing.T) {
 	}
 	if texts := client.sentTexts(); len(texts) != 0 {
 		t.Errorf("Cur (test currency) sent %q, want nothing", texts)
+	}
+}
+
+// TestAnekdotRequest runs the whole /anekdot command against a stubbed
+// anekdot.ru page: the page is fetched over TLS, parsed, and the joke is sent
+// to the chat. A page without the joke marker is reported as an error and
+// nothing is sent.
+func TestAnekdotRequest(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	var page string
+	stubTLSProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "www.anekdot.ru" || r.URL.Path != "/rss/randomu.html" {
+			http.Error(w, "unexpected target "+r.Host+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		fmt.Fprint(w, page)
+	})
+
+	page = `<html>JSON.parse('[\"Анекдот про тесты<br>и про продакшн\",\"comments']);</html>`
+	if err := Anekdot(bot, testContext(bot, "/anekdot", testUser(42))); err != nil {
+		t.Fatalf("Anekdot: %v", err)
+	}
+	want := "Анекдот про тесты и про продакшн"
+	if texts := client.sentTexts(); len(texts) != 1 || texts[0] != want {
+		t.Errorf("Anekdot sent %q, want %q", texts, want)
+	}
+
+	client.clearCalls()
+	page = `<html>503 Service Unavailable</html>`
+	if err := Anekdot(bot, testContext(bot, "/anekdot", testUser(42))); err == nil ||
+		!strings.Contains(err.Error(), "нет текста анекдота") {
+		t.Errorf("Anekdot (no joke on the page): err = %v, want the missing joke error", err)
+	}
+	if texts := client.sentTexts(); len(texts) != 0 {
+		t.Errorf("Anekdot (no joke on the page) sent %q, want nothing", texts)
+	}
+}
+
+// TestCurConversion runs /cur end to end: the fiat and crypto maps are loaded
+// from CoinMarketCap, the price is converted, and the result is a reply to the
+// command. The client of the API builds its own http.Client, so the requests
+// are intercepted by the proxy of the test binary (see stubEnvRoute).
+func TestCurConversion(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	oldKey := Config.CurrencyKey
+	oldCrypto, oldFiat, oldCustom := CryptoMap, FiatMap, CustomMap
+	t.Cleanup(func() { Config.CurrencyKey, CryptoMap, FiatMap, CustomMap = oldKey, oldCrypto, oldFiat, oldCustom })
+
+	// Empty maps force GetSymbolId to load them from the API.
+	Config.CurrencyKey = "test-key"
+	CryptoMap, FiatMap, CustomMap = nil, nil, nil
+
+	var mu sync.Mutex
+	var seen []string
+	// The proxy handler runs on its own goroutines, so the recorded requests
+	// are read and cleared under the same mutex.
+	seenRequests := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), seen...)
+	}
+	clearRequests := func() {
+		mu.Lock()
+		seen = nil
+		mu.Unlock()
+	}
+	record := func(r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.URL.Path+"?"+r.URL.RawQuery)
+		mu.Unlock()
+	}
+	stubEnvRoute(t, "pro-api.coinmarketcap.com", "/v1/", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		if r.Header.Get("X-CMC_PRO_API_KEY") != "test-key" {
+			http.Error(w, `{"error_message":"bad key"}`, http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/cryptocurrency/map":
+			fmt.Fprint(w, `{"status":{"error_code":0},"data":[{"id":1,"name":"Bitcoin","symbol":"BTC"},{"id":1027,"name":"Ethereum","symbol":"ETH"}]}`)
+		case "/v1/fiat/map":
+			fmt.Fprint(w, `{"status":{"error_code":0},"data":[{"id":9913,"name":"US Dollar","symbol":"USD","sign":"$"},{"id":9914,"name":"Euro","symbol":"EUR","sign":"€"}]}`)
+		case "/v1/tools/price-conversion":
+			fmt.Fprint(w, `{"status":{"error_code":0},"data":{"id":9913,"name":"US Dollar","symbol":"USD","amount":1,"quote":{"9914":{"price":0.92}}}}`)
+		default:
+			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+		}
+	})
+
+	if err := Cur(bot, testContext(bot, "/cur 1 USD EUR", testUser(42))); err != nil {
+		t.Fatalf("Cur: %v", err)
+	}
+	want := "1.00 US Dollar = 0.92 Euro"
+	if texts := client.sentTexts(); len(texts) != 1 || texts[0] != want {
+		t.Errorf("Cur sent %q, want %q", texts, want)
+	}
+
+	// The maps stay in the globals, so the next lookup needs no request.
+	if len(CryptoMap) != 2 || len(FiatMap) != 2 {
+		t.Errorf("Cur: CryptoMap = %d entries, FiatMap = %d, want 2 and 2", len(CryptoMap), len(FiatMap))
+	}
+
+	requests := seenRequests()
+	for _, endpoint := range []string{"/v1/cryptocurrency/map", "/v1/fiat/map", "/v1/tools/price-conversion"} {
+		found := false
+		for _, entry := range requests {
+			if strings.HasPrefix(entry, endpoint+"?") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Cur: the API never saw %v, requests: %v", endpoint, requests)
+		}
+	}
+	for _, entry := range requests {
+		if strings.HasPrefix(entry, "/v1/tools/price-conversion") &&
+			!strings.Contains(entry, "amount=1.000000") {
+			t.Errorf("Cur price request = %q, want amount=1.000000&id=9913&convert_id=9914", entry)
+		}
+	}
+
+	// An unknown symbol is refused before any conversion request.
+	client.clearCalls()
+	if err := Cur(bot, testContext(bot, "/cur 1 ZZZ EUR", testUser(42))); err == nil ||
+		!strings.Contains(err.Error(), "распознать") {
+		t.Errorf("Cur (unknown symbol): err = %v, want the unknown currency error", err)
+	}
+
+	// A failing map request is the error of GenerateMaps, not a panic. The
+	// client of the API throws its own status error away and reports the empty
+	// body as a JSON error.
+	clearRequests()
+	CryptoMap, FiatMap, CustomMap = nil, nil, nil
+	stubEnvRoute(t, "pro-api.coinmarketcap.com", "/v1/cryptocurrency/map", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		http.Error(w, `{"error_message":"rate limit"}`, http.StatusTooManyRequests)
+	})
+	if err := GenerateMaps(); err == nil {
+		t.Errorf("GenerateMaps (API failure): err = nil, want an error")
+	}
+	if requests := seenRequests(); len(requests) != 1 {
+		t.Errorf("GenerateMaps (API failure): API requests = %v, want one map request", requests)
+	}
+
+	// Without a currency key the maps are not loaded at all.
+	Config.CurrencyKey = ""
+	CryptoMap, FiatMap, CustomMap = nil, nil, nil
+	if err := GenerateMaps(); err != nil {
+		t.Errorf("GenerateMaps (no key): err = %v, want nil", err)
+	}
+	if requests := seenRequests(); len(requests) != 1 {
+		t.Errorf("GenerateMaps (no key): API requests = %v, want no new request", requests)
 	}
 }

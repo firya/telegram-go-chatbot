@@ -4,13 +4,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 )
 
 // TestAiInit covers the agent build: the model is pointed at the URL from
@@ -220,6 +224,75 @@ func TestAIStreamError(t *testing.T) {
 	}
 }
 
+// TestAIWithPhoto runs /ai with a picture attached to the command: the picture
+// is read, encoded, and travels to the model as a data URL next to the text of
+// the request, and the answer is streamed into the reply as usual.
+func TestAIWithPhoto(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	oldSystem, oldAgent, oldURL := AISystem, AIAgent, Config.AIURL
+	t.Cleanup(func() { AISystem, AIAgent, Config.AIURL = oldSystem, oldAgent, oldURL })
+
+	var mu sync.Mutex
+	var body string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		data, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		body = string(data)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, `data: {"choices":[{"index":0,"delta":{"content":"на картинке"}}]}`+"\n\n")
+		fmt.Fprint(w, `data: {"choices":[{"index":0,"delta":{"content":" тест"},"finish_reason":"stop"}]}`+"\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(server.Close)
+
+	Config.AIURL = server.URL + "/v1"
+	AISystem = "система"
+	if err := AiInit(); err != nil {
+		t.Fatalf("AiInit: %v", err)
+	}
+
+	input := ffmpegMedia(t, "photo")
+	data, err := os.ReadFile(input)
+	if err != nil {
+		t.Fatalf("generated photo: %v", err)
+	}
+	b64 := base64.StdEncoding.EncodeToString(data)
+	client.setResult("getFile", json.RawMessage(fmt.Sprintf(`{"file_path":%q,"file_size":%d}`, input, len(data))))
+
+	msg := testMessage("/ai что на картинке", testUser(42))
+	msg.Photo = []gotgbot.PhotoSize{{FileId: "ph1", FileSize: int64(len(data))}}
+	if err := AI(bot, ext.NewContext(bot, &gotgbot.Update{UpdateId: 1, Message: msg}, nil)); err != nil {
+		t.Fatalf("AI (photo): %v", err)
+	}
+
+	edits := client.callsFor("editMessageText")
+	if len(edits) == 0 {
+		t.Fatalf("AI (photo): editMessageText calls = 0, want the streamed answer")
+	}
+	text, _ := edits[len(edits)-1].Params["text"].(string)
+	if !strings.Contains(text, "на картинке тест") {
+		t.Errorf("AI (photo) final edit = %q, want the streamed text", text)
+	}
+
+	// The model gets the bytes of the picture, not a path to a file it cannot
+	// reach, and the text of the command next to it.
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.Contains(body, "data:image/jpeg;base64,"+b64) {
+		t.Errorf("AI (photo): the model request has no photo in it: %.400v", body)
+	}
+	if !strings.Contains(body, "что на картинке") {
+		t.Errorf("AI (photo): the model request has no command text in it: %.400v", body)
+	}
+}
+
 // TestGetImageForLLM covers the picture handed to the model: the file is read
 // from disk, encoded as base64, and the mime type comes from its extension.
 func TestGetImageForLLM(t *testing.T) {
@@ -251,6 +324,67 @@ func TestGetImageForLLM(t *testing.T) {
 	// The file the picture was read from is removed behind the handler.
 	if _, err := os.Stat(input); !os.IsNotExist(err) {
 		t.Errorf("getImageForLLM: %v, want the source file removed", err)
+	}
+}
+
+// TestGetImageForLLMRemote covers the picture the bot does not have on disk:
+// it is downloaded from the Telegram file server over TLS, encoded the same
+// way, and the downloaded copy is removed behind the helper.
+func TestGetImageForLLMRemote(t *testing.T) {
+	_, client := setupTestEnv(t)
+
+	source := ffmpegMedia(t, "photo")
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("generated photo: %v", err)
+	}
+
+	// A path under the temp dir that does not exist: the helper downloads it.
+	remote := filepath.Join(t.TempDir(), "photos", "photo.jpg")
+	client.setResult("getFile", json.RawMessage(fmt.Sprintf(`{"file_path":%q,"file_size":%d}`, remote, len(data))))
+
+	oldToken := Config.Token
+	t.Cleanup(func() { Config.Token = oldToken })
+	Config.Token = "TESTTOKEN"
+
+	var mu sync.Mutex
+	var paths []string
+	stubTLSProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "api.telegram.org" || !strings.Contains(r.URL.Path, "/file/botTESTTOKEN/") {
+			http.Error(w, "unexpected request "+r.Host+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.Write(data)
+	})
+
+	msg := &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "ph1", FileSize: int64(len(data))}}}
+	b64, mimeType, err := getImageForLLM(msg)
+	if err != nil {
+		t.Fatalf("getImageForLLM (remote file): %v", err)
+	}
+	if mimeType != "image/jpeg" {
+		t.Errorf("getImageForLLM (remote file) mime = %q, want image/jpeg", mimeType)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		t.Fatalf("getImageForLLM (remote file) returned no base64: %v", err)
+	}
+	if string(decoded) != string(data) {
+		t.Errorf("getImageForLLM (remote file) = %d bytes, want the bytes of the photo", len(decoded))
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(paths) == 0 {
+		t.Errorf("getImageForLLM (remote file): the Telegram file server was never asked, want a download")
+	}
+
+	// The downloaded copy is cleaned up behind the helper.
+	if _, err := os.Stat(remote); !os.IsNotExist(err) {
+		t.Errorf("getImageForLLM (remote file): %v, want the downloaded file removed", err)
 	}
 }
 

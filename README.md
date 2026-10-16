@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 86 исходников `.go`, 129 тестов в 21 файле
+- 86 исходников `.go`, 141 тест в 22 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -125,15 +125,18 @@ docker run -d --name zavtrachat -v "$PWD/config.json:/config.json" zavtrachat
 `yt-dlp` в образ не входит — `/mp3` и `/download` в контейнере работать не будут.
 
 CI (`.github/workflows/`):
-- `deploy.yml` — на изменение `**.go`: сборка `telegram-go-chatbot` на self-hosted раннере, копирование
-  в `/home/telegram/bot/` и `systemctl restart telegram-go-chatbot`;
+- `deploy.yml` — на изменение `**.go`, `go.mod`/`go.sum` и самого workflow: `Test` гоняет `go vet` и
+  `go test -race -count=1` на `ubuntu-latest` (покрытие складывается в артефакт), затем на `push` в
+  `master` `Deploy` собирает `telegram-go-chatbot` на self-hosted раннере, копирует его в
+  `/home/telegram/bot/` и делает `systemctl restart telegram-go-chatbot`. На pull request тесты
+  идут, прод не перезапускается; параллельные деплои блокируются `concurrency`-группой;
 - `docker-publish_yml` — сборка и публикация образа в `ghcr.io` + cosign-подпись. **Файл назван с
   `_yml` вместо `.yml`, поэтому GitHub Actions его не подхватывает** (workflows ищут `*.yml`/`*.yaml`).
 
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 129 тестов, ~25–40 с
+go test -race -count=1 ./...                                   # 141 тест, ~20–40 с
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
@@ -145,15 +148,23 @@ PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # прове�
 
 Сети и Postgres тесты не требуют. Учитывайте: тесты идут на SQLite, прод — на PostgreSQL, поэтому
 поведение БД в проде тестами не доказывается (`TestDataBaseInit` проверяет только пути отказа).
-Три теста зависят от окружения и пропускаются без него: `TestFFmpegConvert` гоняет настоящие
-`ffmpeg`/`ffprobe` по сгенерированным секундным файлам (пропускается, если бинарников нет),
-`TestMtprotoConnectProbe` — без `PROTO_PROBE=1`, `TestYtdlpGetVer` — без установленного `yt-dlp`.
+Зависимости от окружения: десять тестов гоняют настоящие `ffmpeg`/`ffprobe` по сгенерированным
+секундным файлам и пропускаются, если бинарников нет (`TestFFmpegConvert`, `TestConvert`,
+`TestInvert`, `TestDistort`, `TestLoopAnimation`, `TestDownloadFile`, `TestFFmpegRemoteMedia`,
+`TestGetImageForLLM`, `TestGetImageForLLMRemote`, `TestAIWithPhoto`); `TestMtprotoConnectProbe`
+пропускается без `PROTO_PROBE=1`, `TestYtdlpGetVer` — без установленного `yt-dlp`.
 
-Особые приёмы в четырёх тестах: `TestRestart` запускает процесс заново (`os.Exit` внутри обработчика
-нельзя проверить из того же процесса), `TestConfigInit` работает в `t.TempDir()`, чтобы не трогать
-`config.json` чекаута, `/ai` (`TestAIStream`, `TestAIStreamError`) отвечает на локальный
-`httptest`-эндпоинт в формате OpenAI, `TestBotInit` поднимает бота на локальной заглушке Bot API
-(`getMe`, удаление вебхука, polling, отчёт сисадмину) — наружу тесты не ходят.
+Наружу тесты не ходят: весь внешний трафик уходит в локальные заглушки. `mitm_test.go` поднимает
+MITM-прокси — `TestMain` генерирует одноразовый CA, пишет его в `SSL_CERT_FILE` и публикует прокси
+через `HTTP_PROXY`/`HTTPS_PROXY`, поэтому в заглушку попадают даже клиенты с дефолтным транспортом
+(клиент CoinMarketCap); сертификаты для хостов подписываются на лету. Два пути перехвата:
+`stubTLSProxy` (прокси для `httpClient()`) и `stubEnvRoute` (маршрут поверх прокси процесса).
+Локальные `httptest`-серверы: заглушка Bot API (`TestBotInit` — `getMe`, удаление вебхука, polling
+и отчёт сисадмину; `TestBotInitWebhook` — сервер вебхука поднимается до `setWebhook`, запрос без
+secret-токена получает 401), OpenAI-формат для `/ai` (`TestAIStream`, `TestAIStreamError`,
+`TestAIWithPhoto`). Особые приёмы: `TestRestart` запускает процесс заново (`os.Exit` внутри
+обработчика нельзя проверить из того же процесса), `TestConfigInit` работает в `t.TempDir()`,
+чтобы не трогать `config.json` чекаута.
 
 ## Структура
 

@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 86 `.go` source files, 129 tests in 21 files
+- 86 `.go` source files, 141 tests in 22 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -125,8 +125,11 @@ The image has `WORKDIR /`, `ENTRYPOINT /goapp` and ffmpeg installed; the config 
 `/config.json`. `yt-dlp` is not part of the image — `/mp3` and `/download` will not work in the container.
 
 CI (`.github/workflows/`):
-- `deploy.yml` — on `**.go` changes: builds `telegram-go-chatbot` on a self-hosted runner, copies it to
-  `/home/telegram/bot/` and runs `systemctl restart telegram-go-chatbot`;
+- `deploy.yml` — on `**.go`, `go.mod`/`go.sum` and workflow changes: `Test` runs `go vet` and
+  `go test -race -count=1` on `ubuntu-latest` (the coverage profile is uploaded as an artifact), then on
+  `push` to `master` `Deploy` builds `telegram-go-chatbot` on a self-hosted runner, copies it to
+  `/home/telegram/bot/` and runs `systemctl restart telegram-go-chatbot`. Pull requests run the tests
+  only and never restart production; `concurrency` blocks overlapping deploys;
 - `docker-publish_yml` — builds the image and publishes it to `ghcr.io` with a cosign signature.
   **The file is named `_yml` instead of `.yml`, so GitHub Actions never picks it up** (workflows are
   looked for as `*.yml`/`*.yaml`).
@@ -134,7 +137,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 129 tests, ~25–40 s
+go test -race -count=1 ./...                                   # 141 tests, ~20–40 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
@@ -146,16 +149,23 @@ The test infrastructure is `testutils_test.go`:
 
 Tests need no network and no Postgres. Note that tests run on SQLite while production runs on
 PostgreSQL, so production database behaviour is not proven by the tests (`TestDataBaseInit` only
-checks the failure paths). Three tests depend on the environment and skip without it:
-`TestFFmpegConvert` runs the real `ffmpeg`/`ffprobe` over generated one-second files (it skips when
-the binaries are missing), `TestMtprotoConnectProbe` skips without `PROTO_PROBE=1`, and
-`TestYtdlpGetVer` skips without an installed `yt-dlp`.
+checks the failure paths). Ten tests run the real `ffmpeg`/`ffprobe` over generated one-second files
+and skip when the binaries are missing (`TestFFmpegConvert`, `TestConvert`, `TestInvert`,
+`TestDistort`, `TestLoopAnimation`, `TestDownloadFile`, `TestFFmpegRemoteMedia`, `TestGetImageForLLM`,
+`TestGetImageForLLMRemote`, `TestAIWithPhoto`); `TestMtprotoConnectProbe` skips without `PROTO_PROBE=1`
+and `TestYtdlpGetVer` skips without an installed `yt-dlp`.
 
-Four tests use special tricks: `TestRestart` reruns the process (`os.Exit` inside the handler cannot
-be checked from the same process), `TestConfigInit` works inside `t.TempDir()` so the `config.json`
-of the checkout is never touched, and `/ai` (`TestAIStream`, `TestAIStreamError`) answers a local
-`httptest` endpoint in the OpenAI format. `TestBotInit` brings the bot up against a local Bot API
-stand-in (`getMe`, webhook deletion, polling, the sysadmin report) — tests never leave the machine.
+Tests never leave the machine: all outbound traffic goes to local stand-ins. `mitm_test.go` starts a
+MITM proxy — `TestMain` generates a throwaway CA, points `SSL_CERT_FILE` at it and publishes the proxy
+through `HTTP_PROXY`/`HTTPS_PROXY`, so even clients with the default transport (the CoinMarketCap
+client) land in the stand-in; leaf certificates are signed per host on the fly. There are two
+interception paths: `stubTLSProxy` (the proxy `httpClient()` uses) and `stubEnvRoute` (a route on the
+process-wide proxy). The local `httptest` servers cover the Bot API (`TestBotInit` — `getMe`, webhook
+deletion, polling and the sysadmin report; `TestBotInitWebhook` — the webhook server is up before
+`setWebhook` is sent, and a request without the secret token gets 401) and the OpenAI format for `/ai`
+(`TestAIStream`, `TestAIStreamError`, `TestAIWithPhoto`). Special tricks: `TestRestart` reruns the
+process (`os.Exit` inside the handler cannot be checked from the same process), and `TestConfigInit`
+works inside `t.TempDir()` so the `config.json` of the checkout is never touched.
 
 ## Layout
 
