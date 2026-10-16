@@ -78,9 +78,12 @@ func MentionUser(user *gotgbot.User) string {
 }
 
 func RandInt(min int, max int) int {
-	b, err := rand.Int(rand.Reader, big.NewInt(int64(max+1)))
+	if max < min {
+		return min
+	}
+	b, err := rand.Int(rand.Reader, big.NewInt(int64(max-min+1)))
 	if err != nil {
-		return 0
+		return min
 	}
 	return min + int(b.Int64())
 }
