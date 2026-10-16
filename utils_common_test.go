@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -354,12 +355,34 @@ func ffmpegMedia(t *testing.T, kind string) string {
 	return path
 }
 
+// sentFilePaths lists the local files the fake client was asked to send with
+// the given method. FFmpegConvert opens its result file and hands the handle
+// over, so the reader name is the path that was sent. Tests check the paths of
+// their own conversions instead of globbing the temp dir: result names are
+// unique per conversion, so a conversion running in another process is a
+// different file that this test has no business inspecting.
+func sentFilePaths(client *fakeBotClient, method string) []string {
+	var paths []string
+	for _, call := range client.callsFor(method) {
+		file, ok := call.Params[strings.ToLower(strings.TrimPrefix(method, "send"))].(*gotgbot.FileReader)
+		if !ok {
+			continue
+		}
+		if path, ok := file.Data.(interface{ Name() string }); ok {
+			paths = append(paths, path.Name())
+		}
+	}
+	return paths
+}
+
 // TestFFmpegConvert runs the real ffmpeg/ffprobe on generated 1-second files.
 // The conversions the bot offers fall back between tracks: an audio file asked
 // to become a video is sent as audio, a video without audio asked to become an
 // mp3 is sent as an animation.
 func TestFFmpegConvert(t *testing.T) {
 	bot, client := setupTestEnv(t)
+
+	var converted []string
 
 	for _, c := range []struct {
 		name, kind, targetType, method string
@@ -387,6 +410,7 @@ func TestFFmpegConvert(t *testing.T) {
 		if calls[0].Params["chat_id"] != int64(-100) {
 			t.Errorf("%s: %s chat_id = %v, want -100", c.name, c.method, calls[0].Params["chat_id"])
 		}
+		converted = append(converted, sentFilePaths(client, c.method)...)
 		client.Calls = nil
 	}
 
@@ -422,13 +446,81 @@ func TestFFmpegConvert(t *testing.T) {
 		t.Errorf("FFmpegConvert (xyz): err = %v, want the unsupported target", err)
 	}
 
-	// The converted file is removed after sending.
-	leftovers, err := filepath.Glob(filepath.Join(os.TempDir(), "*_converted.*"))
-	if err != nil {
-		t.Fatalf("glob temp dir: %v", err)
+	// The converted files are removed after sending.
+	if len(converted) != 7 {
+		t.Errorf("converted files = %d, want the %d conversions of the loop", len(converted), 7)
 	}
-	if len(leftovers) != 0 {
-		t.Errorf("converted files left in the temp dir: %v", leftovers)
+	for _, path := range converted {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("converted file left after sending: %v", path)
+		}
+	}
+}
+
+// TestFFmpegConvertConcurrentSameName converts four copies of one file at the
+// same time, the way four conversations converting one viral file do. Every
+// conversion needs its own result name: a name built from the input name and
+// the current second made them write one and the same file, and the first to
+// finish removed the file the others were about to send.
+func TestFFmpegConvertConcurrentSameName(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	source := ffmpegMedia(t, "video_only")
+	name := filepath.Base(source)
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("generated video: %v", err)
+	}
+
+	const runs = 4
+	media := make([]Media, runs)
+	for i := range media {
+		path := filepath.Join(t.TempDir(), name)
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatalf("copy the generated video: %v", err)
+		}
+		media[i] = Media{FileName: name, FilePath: path}
+	}
+	client.clearCalls()
+
+	errs := make([]error, runs)
+	var wg sync.WaitGroup
+	for i := range media {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = FFmpegConvert(testContext(bot, "/convert", testUser(42)), media[i], "mp4")
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("conversion %v of %v: %v", i+1, runs, err)
+		}
+	}
+
+	// Every conversion must have sent a result file of its own.
+	sent := client.callsFor("sendAnimation")
+	if len(sent) != runs {
+		t.Fatalf("sendAnimation calls = %d, want %d", len(sent), runs)
+	}
+	paths := sentFilePaths(client, "sendAnimation")
+	if len(paths) != runs {
+		t.Fatalf("result files = %v, want %v opened result files", paths, runs)
+	}
+	unique := map[string]int{}
+	for _, path := range paths {
+		unique[path]++
+	}
+	if len(unique) != runs {
+		t.Errorf("result files = %v, want %v distinct names", paths, runs)
+	}
+
+	for path := range unique {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("converted file left after sending: %v", path)
+		}
 	}
 }
 

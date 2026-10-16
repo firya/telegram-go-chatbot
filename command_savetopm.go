@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,6 +35,10 @@ func SaveToPM(bot *gotgbot.Bot, context *ext.Context) error {
 			return err
 		}
 	}
-	Bot.SendMessage(context.EffectiveSender.User.Id, link, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: msg.MessageId, AllowSendingWithoutReply: true}})
+	if _, err := Bot.SendMessage(context.EffectiveSender.User.Id, link, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: msg.MessageId, AllowSendingWithoutReply: true}}); err != nil {
+		// The copy is already in the PM; only the link is missing, so the
+		// command keeps its successful answer.
+		log.Printf("topm: the copy reached %v, the link did not: %v", context.EffectiveSender.User.Id, err)
+	}
 	return Remove(bot, context)
 }

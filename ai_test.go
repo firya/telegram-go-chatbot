@@ -388,6 +388,67 @@ func TestGetImageForLLMRemote(t *testing.T) {
 	}
 }
 
+// TestGetImageForLLMConcurrentSameFile asks about one and the same picture
+// from four conversations at once. Each request downloads its own copy under a
+// unique name: the name built from the current second made the requests share
+// one file, and the first to finish removed the copy the others were reading.
+func TestGetImageForLLMConcurrentSameFile(t *testing.T) {
+	_, client := setupTestEnv(t)
+
+	source := ffmpegMedia(t, "photo")
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("generated photo: %v", err)
+	}
+
+	remote := filepath.Join(t.TempDir(), "photos", "photo.jpg")
+	client.setResult("getFile", json.RawMessage(fmt.Sprintf(`{"file_path":%q,"file_size":%d}`, remote, len(data))))
+
+	oldToken := Config.Token
+	t.Cleanup(func() { Config.Token = oldToken })
+	Config.Token = "TESTTOKEN"
+
+	stubTLSProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "api.telegram.org" || !strings.Contains(r.URL.Path, "/file/botTESTTOKEN/") {
+			http.Error(w, "unexpected request "+r.Host+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		w.Write(data)
+	})
+
+	msg := &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "ph1", FileSize: int64(len(data))}}}
+
+	const runs = 4
+	errs := make([]error, runs)
+	var wg sync.WaitGroup
+	for i := range errs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			b64, mimeType, err := getImageForLLM(msg)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			if mimeType != "image/jpeg" {
+				errs[i] = fmt.Errorf("mime = %q, want image/jpeg", mimeType)
+				return
+			}
+			decoded, err := base64.StdEncoding.DecodeString(b64)
+			if err != nil || string(decoded) != string(data) {
+				errs[i] = fmt.Errorf("decoded %d bytes, want the bytes of the photo", len(decoded))
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("getImageForLLM request %v of %v: %v", i+1, runs, err)
+		}
+	}
+}
+
 // TestSetAISystem covers /setaisystem: the refusal for regular users, and the
 // prompt the admin sets on top of the one from config.json.
 func TestSetAISystem(t *testing.T) {

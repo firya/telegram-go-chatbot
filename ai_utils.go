@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	tgmd "github.com/eekstunt/telegramify-markdown-go"
@@ -59,24 +58,33 @@ func getImageForLLM(message *gotgbot.Message) (string, string, error) {
 		return "", "", err
 	}
 	mimeType := mime.TypeByExtension(filepath.Ext(media.FilePath))
-	queryFilePath := os.TempDir() + "/" + fmt.Sprint(time.Now().Unix()) + filepath.Base(media.FilePath)
+	queryFilePath := media.FilePath
 
-	if _, err := os.Stat(media.FilePath); err == nil {
-		queryFilePath = media.FilePath
-	} else {
+	if _, err := os.Stat(media.FilePath); err != nil {
+		// The picture is not on disk: download it into a name no other request
+		// can be using. The second-granularity name used to collide when two
+		// users asked about the same picture in the same second, and one of
+		// them read a file the other one had already removed.
+		queryFile, err := os.CreateTemp(os.TempDir(), "zavtrachat-llm-*")
+		if err != nil {
+			return "", "", err
+		}
+		queryFilePath = queryFile.Name()
+		queryFile.Close()
+
 		err = DownloadFile(queryFilePath, fmt.Sprintf("https://api.telegram.org/file/bot%v/%v", Config.Token, media.FilePath))
 		if err != nil {
 			return "", "", err
 		}
 	}
+	// The copy is only needed for this request, on every way out of the function.
+	defer os.Remove(queryFilePath)
 
 	imgData, err := os.ReadFile(queryFilePath)
 	if err != nil {
 		return "", "", err
 	}
 	b64 := base64.StdEncoding.EncodeToString(imgData)
-
-	os.Remove(queryFilePath)
 
 	return b64, mimeType, nil
 }

@@ -25,9 +25,14 @@ var DistortBusy bool
 
 var DistortCache map[string]string
 
+// DistortTempDir is the parent of the distort work directories. It is a
+// package variable so tests can point the work directories at their own temp
+// dir instead of sharing the system one with every other process.
+var DistortTempDir = os.TempDir()
+
 // Distort given file
 func Distort(bot *gotgbot.Bot, context *ext.Context) error {
-	dir := fmt.Sprintf("%v/telegram-go-chatbot-distort", os.TempDir())
+	dir := fmt.Sprintf("%v/telegram-go-chatbot-distort", DistortTempDir)
 	if err := os.Mkdir(dir, os.ModePerm); err != nil {
 		os.RemoveAll(dir)
 		os.Mkdir(dir, os.ModePerm)
@@ -102,7 +107,7 @@ func Distort(bot *gotgbot.Bot, context *ext.Context) error {
 
 	jobStarted := time.Now().Unix()
 
-	workdir := fmt.Sprintf("%v/telegram-go-chatbot-distort/%v", os.TempDir(), media.FileID)
+	workdir := fmt.Sprintf("%v/telegram-go-chatbot-distort/%v", DistortTempDir, media.FileID)
 	inputFile := media.FilePath
 	outputFile := fmt.Sprintf("%v/output.mp4", workdir)
 

@@ -468,7 +468,19 @@ func FFmpegConvert(context *ext.Context, media Media, targetType string) error {
 		return fmt.Errorf("targetType %v not supported", targetType)
 	}
 
-	resultFilePath := fmt.Sprintf("%v/%v_%v_converted.%v", os.TempDir(), name, time.Now().Unix(), extension)
+	// The result name is unique per conversion: two conversions of the same
+	// file in the same second used to write one and the same result file, and
+	// the first to finish removed the file the other one was about to send.
+	base := strings.ReplaceAll(filepath.Base(name), "*", "")
+	if base == "" {
+		base = "converted"
+	}
+	tmpFile, err := os.CreateTemp(os.TempDir(), base+"_*_converted."+extension)
+	if err != nil {
+		return err
+	}
+	resultFilePath := tmpFile.Name()
+	tmpFile.Close()
 
 	err = ffmpeg.Input(media.FilePath).Output(resultFilePath, ffmpeg.MergeKwArgs([]ffmpeg.KwArgs{defaultKwArgs, KwArgs})).OverWriteOutput().ErrorToStdOut().Run()
 	if err != nil {

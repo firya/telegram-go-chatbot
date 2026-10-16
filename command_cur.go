@@ -74,7 +74,10 @@ func GetSymbolId(symbol string) (string, error) {
 }
 
 func GetIdName(ID string) string {
-	ID_int, _ := strconv.Atoi(ID)
+	ID_int, err := strconv.Atoi(ID)
+	if err != nil {
+		return ""
+	}
 	for _, fiat := range FiatMap {
 		if int(fiat.ID) == ID_int {
 			return fiat.Name

@@ -148,6 +148,13 @@ func TestDistort(t *testing.T) {
 	DistortBusy = false
 	DistortCache = map[string]string{}
 
+	// The work directories live under the system temp dir, which every process
+	// on the machine shares: point them at the temp dir of this test, so a
+	// second test process cannot wipe a work directory this one is converting.
+	oldTempDir := DistortTempDir
+	t.Cleanup(func() { DistortTempDir = oldTempDir })
+	DistortTempDir = t.TempDir()
+
 	// The fake API must answer with a document, /distort stores its file id.
 	client.setResult("sendDocument", json.RawMessage(`{"message_id":1,"document":{"file_id":"doc1"}}`))
 	client.setResult("sendAudio", json.RawMessage(`{"message_id":1,"audio":{"file_id":"distorted1"}}`))
@@ -228,7 +235,7 @@ func TestDistort(t *testing.T) {
 	// guard: the handler wipes its parent directory when it exists, so a marker
 	// file left there would not survive to the check.
 	client.clearCalls()
-	parent := fmt.Sprintf("%v/telegram-go-chatbot-distort", os.TempDir())
+	parent := fmt.Sprintf("%v/telegram-go-chatbot-distort", DistortTempDir)
 	os.RemoveAll(parent)
 	if err := Distort(bot, testReplyContext(bot, "/distort", testUser(42),
 		&gotgbot.Message{Audio: &gotgbot.Audio{FileId: "aud/1"}})); err != nil {

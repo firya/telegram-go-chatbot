@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 86 `.go` source files, 141 tests in 22 files
+- 86 `.go` source files, 143 tests in 22 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -137,7 +137,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 141 tests, ~20–40 s
+go test -race -count=1 ./...                                   # 143 tests, ~20–40 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
@@ -149,11 +149,19 @@ The test infrastructure is `testutils_test.go`:
 
 Tests need no network and no Postgres. Note that tests run on SQLite while production runs on
 PostgreSQL, so production database behaviour is not proven by the tests (`TestDataBaseInit` only
-checks the failure paths). Ten tests run the real `ffmpeg`/`ffprobe` over generated one-second files
-and skip when the binaries are missing (`TestFFmpegConvert`, `TestConvert`, `TestInvert`,
-`TestDistort`, `TestLoopAnimation`, `TestDownloadFile`, `TestFFmpegRemoteMedia`, `TestGetImageForLLM`,
-`TestGetImageForLLMRemote`, `TestAIWithPhoto`); `TestMtprotoConnectProbe` skips without `PROTO_PROBE=1`
-and `TestYtdlpGetVer` skips without an installed `yt-dlp`.
+checks the failure paths). Twelve tests run the real `ffmpeg`/`ffprobe` over generated one-second
+files and skip when the binaries are missing (`TestFFmpegConvert`,
+`TestFFmpegConvertConcurrentSameName`, `TestConvert`, `TestInvert`, `TestDistort`,
+`TestLoopAnimation`, `TestDownloadFile`, `TestFFmpegRemoteMedia`, `TestGetImageForLLM`,
+`TestGetImageForLLMRemote`, `TestGetImageForLLMConcurrentSameFile`, `TestAIWithPhoto`);
+`TestMtprotoConnectProbe` skips without `PROTO_PROBE=1` and `TestYtdlpGetVer` skips without an
+installed `yt-dlp`.
+
+Temporary files of the conversions (`/convert`, `/mp3`, `/download`, the picture for `/ai`) and the
+`/distort` work directories get unique names — `os.CreateTemp`, `chat_id` + `message_id`, and
+`DistortTempDir` for tests. Several runs of the suite on one machine no longer wipe each other's
+files, and concurrent requests for one and the same file no longer read someone else's copy;
+`TestFFmpegConvertConcurrentSameName` and `TestGetImageForLLMConcurrentSameFile` prove it.
 
 Tests never leave the machine: all outbound traffic goes to local stand-ins. `mitm_test.go` starts a
 MITM proxy — `TestMain` generates a throwaway CA, points `SSL_CERT_FILE` at it and publishes the proxy

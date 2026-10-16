@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 86 исходников `.go`, 141 тест в 22 файлах
+- 86 исходников `.go`, 143 теста в 22 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -136,7 +136,7 @@ CI (`.github/workflows/`):
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 141 тест, ~20–40 с
+go test -race -count=1 ./...                                   # 143 теста, ~20–40 с
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
@@ -148,11 +148,19 @@ PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # прове�
 
 Сети и Postgres тесты не требуют. Учитывайте: тесты идут на SQLite, прод — на PostgreSQL, поэтому
 поведение БД в проде тестами не доказывается (`TestDataBaseInit` проверяет только пути отказа).
-Зависимости от окружения: десять тестов гоняют настоящие `ffmpeg`/`ffprobe` по сгенерированным
-секундным файлам и пропускаются, если бинарников нет (`TestFFmpegConvert`, `TestConvert`,
-`TestInvert`, `TestDistort`, `TestLoopAnimation`, `TestDownloadFile`, `TestFFmpegRemoteMedia`,
-`TestGetImageForLLM`, `TestGetImageForLLMRemote`, `TestAIWithPhoto`); `TestMtprotoConnectProbe`
-пропускается без `PROTO_PROBE=1`, `TestYtdlpGetVer` — без установленного `yt-dlp`.
+Зависимости от окружения: двенадцать тестов гоняют настоящие `ffmpeg`/`ffprobe` по сгенерированным
+секундным файлам и пропускаются, если бинарников нет (`TestFFmpegConvert`,
+`TestFFmpegConvertConcurrentSameName`, `TestConvert`, `TestInvert`, `TestDistort`,
+`TestLoopAnimation`, `TestDownloadFile`, `TestFFmpegRemoteMedia`, `TestGetImageForLLM`,
+`TestGetImageForLLMRemote`, `TestGetImageForLLMConcurrentSameFile`, `TestAIWithPhoto`);
+`TestMtprotoConnectProbe` пропускается без `PROTO_PROBE=1`, `TestYtdlpGetVer` — без установленного
+`yt-dlp`.
+
+Временные файлы конвертаций (`/convert`, `/mp3`, `/download`, картинка для `/ai`) и рабочие папки
+`/distort` получают уникальные имена — `os.CreateTemp`, `chat_id` + `message_id`, `DistortTempDir`
+для тестов. Поэтому несколько прогонов набора на одной машине не перетирают друг другу файлы, а
+параллельные запросы на один и тот же файл не читают чужую копию; это проверяют
+`TestFFmpegConvertConcurrentSameName` и `TestGetImageForLLMConcurrentSameFile`.
 
 Наружу тесты не ходят: весь внешний трафик уходит в локальные заглушки. `mitm_test.go` поднимает
 MITM-прокси — `TestMain` генерирует одноразовый CA, пишет его в `SSL_CERT_FILE` и публикует прокси

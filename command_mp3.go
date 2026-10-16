@@ -14,7 +14,9 @@ import (
 
 // Convert given  file
 func Mp3(bot *gotgbot.Bot, context *ext.Context) error {
-	filePath := fmt.Sprintf("%v/%v.mp3", os.TempDir(), context.Message.MessageId)
+	// Message ids restart in every chat, so the chat id belongs in the name:
+	// two chats with the same message number must not share one file.
+	filePath := fmt.Sprintf("%v/%v_%v.mp3", os.TempDir(), context.Message.Chat.Id, context.Message.MessageId)
 
 	if context.Message.ReplyToMessage == nil && len(context.Args()) < 2 {
 		return Reply("Пример использования: <code>/mp3 {ссылка на ютуб/ресурс}</code>\nИли отправь в ответ на какое-либо сообщение с ссылкой <code>/mp3</code>", *context)

@@ -14,9 +14,10 @@ func Set(bot *gotgbot.Bot, context *ext.Context) error {
 
 	var get Get
 	var inputGet string
+	usage := "Пример использования: <code>/set {гет} {значение}</code>\nИли отправь в ответ на какое-либо сообщение <code>/set {гет}</code>"
 	//args check
 	if (context.Message.ReplyToMessage == nil && len(context.Args()) < 3) || (context.Message.ReplyToMessage != nil && len(context.Args()) == 1) {
-		return Reply("Пример использования: <code>/set {гет} {значение}</code>\nИли отправь в ответ на какое-либо сообщение <code>/set {гет}</code>", *context)
+		return Reply(usage, *context)
 	}
 	if context.Message.ReplyToMessage == nil {
 		// Args() includes the command itself, so the get name is args[1].
@@ -43,6 +44,10 @@ func Set(bot *gotgbot.Bot, context *ext.Context) error {
 		// Drop the command and the get name; the rest is the value.
 		_, rest, _ := strings.Cut(context.Message.OriginalHTML(), " ")
 		_, html, _ := strings.Cut(rest, " ")
+		if html == "" {
+			// An empty value would save a get that /get cannot answer.
+			return Reply(usage, *context)
+		}
 		get.Data = html
 	} else {
 		get.Name = strings.ToLower(inputGet)
