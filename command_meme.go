@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -15,16 +17,36 @@ import (
 var memeChannel *tg.Channel
 
 // Reply with meme from thedankestmemes
-func Meme(bot *gotgbot.Bot, context *ext.Context) error {
-	api := GoTGProtoClient.API()
+// The parameter is named ctx (not context) so the MTProto helpers below can
+// use the context package.
+func Meme(bot *gotgbot.Bot, ctx *ext.Context) error {
+	api, protoCtx, ready := mtprotoAPI()
+	if !ready {
+		return Reply("MTProto-клиент ещё не подключился, попробуй чуть позже.", *ctx)
+	}
 
 	//get channel object
 	if memeChannel == nil {
-		channelResolve, err := api.ContactsResolveUsername(GoTGProtoContext, &tg.ContactsResolveUsernameRequest{Username: "thedankestmemes"})
+		var chats []tg.ChatClass
+		err := protoRetry(protoCtx, 2, func(callCtx context.Context) error {
+			channelResolve, err := api.ContactsResolveUsername(callCtx, &tg.ContactsResolveUsernameRequest{Username: "thedankestmemes"})
+			if err != nil {
+				return err
+			}
+			chats = channelResolve.GetChats()
+			return nil
+		})
 		if err != nil {
 			return err
 		}
-		memeChannel = channelResolve.GetChats()[0].(*tg.Channel)
+		if len(chats) == 0 {
+			return fmt.Errorf("resolve @thedankestmemes: channel not found")
+		}
+		channel, ok := chats[0].(*tg.Channel)
+		if !ok {
+			return fmt.Errorf("resolve @thedankestmemes: not a channel")
+		}
+		memeChannel = channel
 	}
 	//prepare message query
 	messagesQuery := []tg.InputMessageClass{}
@@ -34,15 +56,24 @@ func Meme(bot *gotgbot.Bot, context *ext.Context) error {
 		messagesQuery = append(messagesQuery, messageObject.AsInputMessageID())
 	}
 	//query messages
-	messagesResult, err := api.ChannelsGetMessages(GoTGProtoContext, &tg.ChannelsGetMessagesRequest{
-		Channel: memeChannel.AsInput(),
-		ID:      messagesQuery,
+	var messagesResult tg.MessagesMessagesClass
+	err := protoRetry(protoCtx, 2, func(callCtx context.Context) error {
+		var err error
+		messagesResult, err = api.ChannelsGetMessages(callCtx, &tg.ChannelsGetMessagesRequest{
+			Channel: memeChannel.AsInput(),
+			ID:      messagesQuery,
+		})
+		return err
 	})
 	if err != nil {
 		return err
 	}
-	//search and download gif
-	for _, mc := range messagesResult.(*tg.MessagesChannelMessages).Messages {
+	channelMessages, ok := messagesResult.(*tg.MessagesChannelMessages)
+	if !ok {
+		return fmt.Errorf("get messages from @thedankestmemes: unexpected answer")
+	}
+	//search and download meme
+	for _, mc := range channelMessages.Messages {
 		if reflect.TypeOf(mc) != reflect.TypeOf(&tg.Message{}) {
 			continue
 		}
@@ -68,16 +99,21 @@ func Meme(bot *gotgbot.Bot, context *ext.Context) error {
 				continue
 			}
 			buf := bytes.Buffer{}
-			downloader.NewDownloader().Download(api, docFile.AsInputDocumentFileLocation()).Stream(GoTGProtoContext, &buf)
+			if err := protoDownload(protoCtx, func(callCtx context.Context) error {
+				_, err := downloader.NewDownloader().Download(api, docFile.AsInputDocumentFileLocation()).Stream(callCtx, &buf)
+				return err
+			}); err != nil {
+				return err
+			}
 			if strings.Contains(docFile.MimeType, "video") {
 				if docFile.MimeType == "video/quicktime" {
-					_, err = bot.SendAnimation(context.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendAnimationOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId}})
+					_, err = bot.SendAnimation(ctx.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendAnimationOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: ctx.Message.MessageId}})
 				} else {
-					_, err = bot.SendVideo(context.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendVideoOpts{ParseMode: gotgbot.ParseModeHTML, SupportsStreaming: true, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId}})
+					_, err = bot.SendVideo(ctx.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendVideoOpts{ParseMode: gotgbot.ParseModeHTML, SupportsStreaming: true, ReplyParameters: &gotgbot.ReplyParameters{MessageId: ctx.Message.MessageId}})
 				}
 			}
 			if strings.Contains(docFile.MimeType, "image") {
-				_, err = bot.SendPhoto(context.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendPhotoOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId}})
+				_, err = bot.SendPhoto(ctx.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendPhotoOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: ctx.Message.MessageId}})
 			}
 			return err
 		} else if reflect.TypeOf(messageMediaClass) == reflect.TypeOf(&tg.MessageMediaPhoto{}) {
@@ -89,14 +125,22 @@ func Meme(bot *gotgbot.Bot, context *ext.Context) error {
 			if !check {
 				continue
 			}
+			if len(photoFile.Sizes) == 0 {
+				continue
+			}
 			fileid := fileid.FromPhoto(photoFile, []rune(photoFile.Sizes[len(photoFile.Sizes)-1].GetType())[0])
 			inputfile, check := fileid.AsInputFileLocation()
 			if !check {
 				continue
 			}
 			buf := bytes.Buffer{}
-			downloader.NewDownloader().Download(api, inputfile).Stream(GoTGProtoContext, &buf)
-			_, err = bot.SendPhoto(context.Message.Chat.Id, gotgbot.InputFileByReader(messageMediaClass.String(), &buf), &gotgbot.SendPhotoOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId}})
+			if err := protoDownload(protoCtx, func(callCtx context.Context) error {
+				_, err := downloader.NewDownloader().Download(api, inputfile).Stream(callCtx, &buf)
+				return err
+			}); err != nil {
+				return err
+			}
+			_, err = bot.SendPhoto(ctx.Message.Chat.Id, gotgbot.InputFileByReader(messageMediaClass.String(), &buf), &gotgbot.SendPhotoOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: ctx.Message.MessageId}})
 			return err
 		} else {
 			continue

@@ -19,13 +19,17 @@ func Mute(bot *gotgbot.Bot, context *ext.Context) error {
 		return Reply("Пример использования: <code>/mute {ID или никнейм}</code>\nИли отправь в ответ на какое-либо сообщение <code>/mute</code>\nЕсли нужно замьютить на время, то добавь время в секундах через пробел.", *context)
 	}
 	target, err := FindUserInMessage(*context.Message)
-	for _, arg := range context.Args() {
-		addtime, err := strconv.ParseInt(arg, 10, 64)
-		if err != nil {
-			continue
+	// The duration may only come after the target: when replying, the target is
+	// the replied-to message (so args[1] can be the time); when using arguments,
+	// args[1] is the target lookup and args[2] the time.
+	timeArg := 1
+	if context.Message.ReplyToMessage == nil {
+		timeArg = 2
+	}
+	if timeArg < len(context.Args()) {
+		if addtime, parseErr := strconv.ParseInt(context.Args()[timeArg], 10, 64); parseErr == nil {
+			untildate = time.Now().Unix() + addtime
 		}
-		untildate = time.Now().Unix() + addtime
-		break
 	}
 	if err != nil {
 		return err

@@ -2,10 +2,8 @@ package main
 
 import (
 	"io"
-	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -13,8 +11,7 @@ import (
 
 // Send text in chat on /say
 func Anekdot(bot *gotgbot.Bot, context *ext.Context) error {
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	httpResponse, err := httpClient.Get("https://www.anekdot.ru/rss/randomu.html")
+	httpResponse, err := httpClient().Get("https://www.anekdot.ru/rss/randomu.html")
 	if err != nil {
 		return err
 	}

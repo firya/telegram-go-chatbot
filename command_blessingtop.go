@@ -31,7 +31,7 @@ func BlessingTop(bot *gotgbot.Bot, context *ext.Context) error {
 			}
 		}
 		i++
-		text += fmt.Sprintf("%v. %v - %d раз\n", i, userIdStr, count)
+		text += fmt.Sprintf("%v. %v - %d %v\n", i, userIdStr, count, ruPlural(count, "раз", "раза", "раз"))
 	}
 	_, err = context.Message.Reply(bot, text, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
 	return err

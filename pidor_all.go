@@ -28,7 +28,7 @@ func Pidorall(bot *gotgbot.Bot, context *ext.Context) error {
 			return err
 		}
 		i++
-		pidorall += prt.Sprintf("%v. %v - %d раз\n", i, username, count)
+		pidorall += prt.Sprintf("%v. %v - %d %v\n", i, username, count, ruPlural(count, "раз", "раза", "раз"))
 	}
 	DB.Model(PidorList{}).Count(&count)
 	pidorall += prt.Sprintf("\nВсего участников — %v", count)

@@ -18,12 +18,11 @@ func AllBets(bot *gotgbot.Bot, context *ext.Context) error {
 	var i = 0
 	var from int64
 	var to int64
-	if len(context.Args()) > 1 {
-		if context.Args()[1] == "all" {
-			from = 0
-		}
-	}
+	// "all" used to be overwritten by the next line, making the option a no-op.
 	from = time.Now().Local().Truncate(24 * time.Hour).Unix()
+	if len(context.Args()) > 1 && context.Args()[1] == "all" {
+		from = 0
+	}
 	to = time.Now().Local().Add(43800 * time.Hour).Unix()
 	result, err := DB.Model(&Bets{}).Where("timestamp > ? AND timestamp < ?", from, to).Order("timestamp ASC").Rows()
 	if err != nil {

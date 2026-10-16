@@ -22,6 +22,11 @@ func Pidordel(bot *gotgbot.Bot, context *ext.Context) error {
 	if result.RowsAffected != 0 {
 		return Reply(fmt.Sprintf("Пользователь %v удалён из игры <b>Пидор Дня</b>!", MentionUser(&user)), *context)
 	} else {
-		return Reply(fmt.Sprintf("Не удалось удалить пользователя:\n<code>%v</code>", result.Error.Error()), *context)
+		// gorm does not return an error when no rows matched - dereferencing result.Error here used to panic.
+		errText := "пользователь не найден в игре"
+		if result.Error != nil {
+			errText = result.Error.Error()
+		}
+		return Reply(fmt.Sprintf("Не удалось удалить пользователя:\n<code>%v</code>", errText), *context)
 	}
 }

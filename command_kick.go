@@ -19,6 +19,12 @@ func Kick(bot *gotgbot.Bot, context *ext.Context) error {
 	if err != nil {
 		return err
 	}
+	// Ban then unban: this is how Telegram kicks a member while still letting
+	// them rejoin via invite link. (Previously this only unbanned the target.)
+	_, err = bot.BanChatMember(context.Message.Chat.Id, target.Id, nil)
+	if err != nil {
+		return err
+	}
 	_, err = bot.UnbanChatMember(context.Message.Chat.Id, target.Id, nil)
 	if err != nil {
 		return err

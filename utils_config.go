@@ -8,6 +8,10 @@ import (
 	"os"
 )
 
+// DefaultReleasesUrl is the release calendar used by /releases when
+// config.json does not set "releases_url".
+const DefaultReleasesUrl = "https://ical-videogames.onrender.com/calendar?platform=ps4&platform=ps5&platform=switch&platform=xbox_one&platform=xbox_series&region=pal"
+
 type Configuration struct {
 	Token             string   `json:"token"`
 	DSN               string   `json:"dsn"`
@@ -63,6 +67,9 @@ func ConfigInit() error {
 		if err != nil {
 			return err
 		}
+	}
+	if Config.ReleasesUrl == "" {
+		Config.ReleasesUrl = DefaultReleasesUrl
 	}
 	if Config.Token == "" {
 		return fmt.Errorf("sting 'token' not found in config.json")

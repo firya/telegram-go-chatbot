@@ -199,9 +199,13 @@ func OnChatMember(bot *gotgbot.Bot, context *ext.Context) error {
 		bot.UnbanChatMember(context.EffectiveChat.Id, context.ChatMember.From.Id, nil)
 	}
 	//User update
+	// GetUser() returns a value; gorm needs an addressable pointer, so copy
+	// it into a local variable first (passing the value directly panics in
+	// the create callback: "reflect.Value.SetInt using unaddressable value").
+	chatUser := context.ChatMember.NewChatMember.GetUser()
 	UserResult := DB.Clauses(clause.OnConflict{
 		UpdateAll: true,
-	}).Create(context.ChatMember.NewChatMember.GetUser())
+	}).Create(&chatUser)
 	if UserResult.Error != nil {
 		ErrorReporting(UserResult.Error)
 	}
@@ -531,7 +535,7 @@ func DownloadFile(filepath string, url string) (err error) {
 	}
 	defer out.Close()
 
-	resp, err := http.Get(url)
+	resp, err := httpClient().Get(url)
 	if err != nil {
 		return err
 	}

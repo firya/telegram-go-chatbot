@@ -18,7 +18,7 @@ func Duelstats(bot *gotgbot.Bot, context *ext.Context) error {
 	if result.RowsAffected == 0 {
 		return Reply("У тебя нет статистики.", *context)
 	}
-	winsMessage := prt.Sprintf("%d побед", duelist.Kills)
-	deathsMessage := prt.Sprintf("%d смертей", duelist.Deaths)
+	winsMessage := prt.Sprintf("%d %v", duelist.Kills, ruPlural(duelist.Kills, "победа", "победы", "побед"))
+	deathsMessage := prt.Sprintf("%d %v", duelist.Deaths, ruPlural(duelist.Deaths, "смерть", "смерти", "смертей"))
 	return Reply(prt.Sprintf("У тебя %s и %s", winsMessage, deathsMessage), *context)
 }

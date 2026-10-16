@@ -20,7 +20,7 @@ func SetGetOwner(bot *gotgbot.Bot, context *ext.Context) error {
 	result := DB.Where(&Get{Name: strings.ToLower(context.Args()[1])}).First(&get)
 	if result.RowsAffected != 0 {
 		get.Creator = context.Message.ReplyToMessage.From.Id
-		DB.First(&get)
+		result = DB.Save(&get)
 		if result.Error != nil {
 			return result.Error
 		}

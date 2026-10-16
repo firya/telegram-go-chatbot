@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -14,16 +16,36 @@ import (
 var meowChannel *tg.Channel
 
 // Reply with GIF from Pan Kotek's channel
-func Meow(bot *gotgbot.Bot, context *ext.Context) error {
-	api := GoTGProtoClient.API()
+// The parameter is named ctx (not context) so the MTProto helpers below can
+// use the context package.
+func Meow(bot *gotgbot.Bot, ctx *ext.Context) error {
+	api, protoCtx, ready := mtprotoAPI()
+	if !ready {
+		return Reply("MTProto-клиент ещё не подключился, попробуй чуть позже.", *ctx)
+	}
 
 	//get channel object
 	if meowChannel == nil {
-		channelResolve, err := api.ContactsResolveUsername(GoTGProtoContext, &tg.ContactsResolveUsernameRequest{Username: "imacat"})
+		var chats []tg.ChatClass
+		err := protoRetry(protoCtx, 2, func(callCtx context.Context) error {
+			channelResolve, err := api.ContactsResolveUsername(callCtx, &tg.ContactsResolveUsernameRequest{Username: "imacat"})
+			if err != nil {
+				return err
+			}
+			chats = channelResolve.GetChats()
+			return nil
+		})
 		if err != nil {
 			return err
 		}
-		meowChannel = channelResolve.GetChats()[0].(*tg.Channel)
+		if len(chats) == 0 {
+			return fmt.Errorf("resolve @imacat: channel not found")
+		}
+		channel, ok := chats[0].(*tg.Channel)
+		if !ok {
+			return fmt.Errorf("resolve @imacat: not a channel")
+		}
+		meowChannel = channel
 	}
 	//prepare message query
 	messagesQuery := []tg.InputMessageClass{}
@@ -33,15 +55,24 @@ func Meow(bot *gotgbot.Bot, context *ext.Context) error {
 		messagesQuery = append(messagesQuery, messageObject.AsInputMessageID())
 	}
 	//query messages
-	messagesResult, err := api.ChannelsGetMessages(GoTGProtoContext, &tg.ChannelsGetMessagesRequest{
-		Channel: meowChannel.AsInput(),
-		ID:      messagesQuery,
+	var messagesResult tg.MessagesMessagesClass
+	err := protoRetry(protoCtx, 2, func(callCtx context.Context) error {
+		var err error
+		messagesResult, err = api.ChannelsGetMessages(callCtx, &tg.ChannelsGetMessagesRequest{
+			Channel: meowChannel.AsInput(),
+			ID:      messagesQuery,
+		})
+		return err
 	})
 	if err != nil {
 		return err
 	}
+	channelMessages, ok := messagesResult.(*tg.MessagesChannelMessages)
+	if !ok {
+		return fmt.Errorf("get messages from @imacat: unexpected answer")
+	}
 	//search and download gif
-	for _, mc := range messagesResult.(*tg.MessagesChannelMessages).Messages {
+	for _, mc := range channelMessages.Messages {
 		if reflect.TypeOf(mc) != reflect.TypeOf(&tg.Message{}) {
 			continue
 		}
@@ -61,16 +92,21 @@ func Meow(bot *gotgbot.Bot, context *ext.Context) error {
 				filename = strings.ReplaceAll(docFile.MimeType, "/", ".")
 			}
 			buf := bytes.Buffer{}
-			downloader.NewDownloader().Download(api, docFile.AsInputDocumentFileLocation()).Stream(GoTGProtoContext, &buf)
+			if err := protoDownload(protoCtx, func(callCtx context.Context) error {
+				_, err := downloader.NewDownloader().Download(api, docFile.AsInputDocumentFileLocation()).Stream(callCtx, &buf)
+				return err
+			}); err != nil {
+				return err
+			}
 			if strings.Contains(docFile.MimeType, "video") {
 				if docFile.MimeType == "video/quicktime" {
-					_, err = bot.SendAnimation(context.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendAnimationOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId}})
+					_, err = bot.SendAnimation(ctx.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendAnimationOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: ctx.Message.MessageId}})
 				} else {
-					_, err = bot.SendVideo(context.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendVideoOpts{ParseMode: gotgbot.ParseModeHTML, SupportsStreaming: true, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId}})
+					_, err = bot.SendVideo(ctx.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendVideoOpts{ParseMode: gotgbot.ParseModeHTML, SupportsStreaming: true, ReplyParameters: &gotgbot.ReplyParameters{MessageId: ctx.Message.MessageId}})
 				}
 			}
 			if strings.Contains(docFile.MimeType, "image") {
-				_, err = bot.SendPhoto(context.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendPhotoOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId}})
+				_, err = bot.SendPhoto(ctx.Message.Chat.Id, gotgbot.InputFileByReader(filename, &buf), &gotgbot.SendPhotoOpts{ParseMode: gotgbot.ParseModeHTML, ReplyParameters: &gotgbot.ReplyParameters{MessageId: ctx.Message.MessageId}})
 			}
 			return err
 		} else {

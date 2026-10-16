@@ -21,7 +21,7 @@ func Pidorme(bot *gotgbot.Bot, context *ext.Context) error {
 	pidor.UserID = context.Message.From.Id
 	DB.Model(&PidorStats{}).Where(pidor).Where("date BETWEEN ? AND ?", time.Date(time.Now().Year(), 1, 1, 0, 0, 0, 0, time.Local), time.Now()).Count(&countYear)
 	DB.Model(&PidorStats{}).Where(pidor).Count(&countAlltime)
-	thisYear := prt.Sprintf("В этом году ты был пидором дня — %d раз", countYear)
-	total := prt.Sprintf("За всё время ты был пидором дня — %d раз!", countAlltime)
+	thisYear := prt.Sprintf("В этом году ты был пидором дня — %d %v", countYear, ruPlural(countYear, "раз", "раза", "раз"))
+	total := prt.Sprintf("За всё время ты был пидором дня — %d %v!", countAlltime, ruPlural(countAlltime, "раз", "раза", "раз"))
 	return Reply(prt.Sprintf("%s\n%s", thisYear, total), *context)
 }

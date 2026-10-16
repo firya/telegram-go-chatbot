@@ -21,7 +21,7 @@ func Pidorstats(bot *gotgbot.Bot, context *ext.Context) error {
 	var username string
 	var count int64
 	if len(context.Args()) == 2 {
-		argYear, err := strconv.Atoi(context.Message.Text)
+		argYear, err := strconv.Atoi(context.Args()[1])
 		if err != nil {
 			return err
 		}
@@ -45,7 +45,7 @@ func Pidorstats(bot *gotgbot.Bot, context *ext.Context) error {
 			return err
 		}
 		i++
-		pidorall += prt.Sprintf("%v. %v - %d раз\n", i, username, count)
+		pidorall += prt.Sprintf("%v. %v - %d %v\n", i, username, count, ruPlural(count, "раз", "раза", "раз"))
 	}
 	DB.Model(PidorList{}).Count(&count)
 	pidorall += prt.Sprintf("\nВсего участников — %d", count)

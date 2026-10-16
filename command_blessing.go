@@ -52,10 +52,13 @@ func Blessing(bot *gotgbot.Bot, context *ext.Context) error {
 			}
 		}
 	}
+	// The death belongs to whoever ends up restricted: on a ricochet that is
+	// the random member picked above, not the admin/sysadmin who pressed the
+	// command (same as Kill, which reassigns target to the ricochet victim).
 	var duelist Duelist
-	result := DB.Model(Duelist{}).Where(context.Message.From.Id).First(&duelist)
+	result := DB.Model(Duelist{}).Where(victim.Id).First(&duelist)
 	if result.RowsAffected == 0 {
-		duelist.UserID = context.Message.From.Id
+		duelist.UserID = victim.Id
 		duelist.Kills = 0
 		duelist.Deaths = 0
 	}

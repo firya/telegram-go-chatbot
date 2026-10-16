@@ -204,9 +204,9 @@ func Accept(bot *gotgbot.Bot, context *ext.Context) error {
 		return err
 	}
 	var PlayerDuelist Duelist
-	result = DB.Model(Duelist{}).Where(victim.Id).First(&PlayerDuelist)
+	result = DB.Model(Duelist{}).Where(player.Id).First(&PlayerDuelist)
 	if result.RowsAffected == 0 {
-		PlayerDuelist.UserID = victim.Id
+		PlayerDuelist.UserID = player.Id
 		PlayerDuelist.Kills = 0
 		PlayerDuelist.Deaths = 0
 	}

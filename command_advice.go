@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"io"
-	"net/http"
-	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -17,8 +15,7 @@ type AdviceResp struct {
 }
 
 func Advice(bot *gotgbot.Bot, context *ext.Context) error {
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	httpResponse, err := httpClient.Get("http://fucking-great-advice.ru/api/random")
+	httpResponse, err := httpClient().Get("http://fucking-great-advice.ru/api/random")
 	if err != nil {
 		return err
 	}

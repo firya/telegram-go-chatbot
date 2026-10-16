@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -54,16 +53,10 @@ func Request(bot *gotgbot.Bot, context *ext.Context) error {
 	if target.IsBot {
 		return Reply("Бота нельзя вызвать на дуэль.", *context)
 	}
-	ChatMember, err := bot.GetChatMember(context.Message.Chat.Id, target.Id, nil)
+	// The chat member lookup doubles as a validity check on the target: a user
+	// that is not in the chat cannot be called out.
+	_, err = bot.GetChatMember(context.Message.Chat.Id, target.Id, nil)
 	if err != nil {
-		return err
-	}
-	log.Println(ChatMember)
-	if false {
-		_, err := context.Message.Reply(bot, "Нельзя вызвать на дуэль мертвеца.", &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
-		if err != nil {
-			return err
-		}
 		return err
 	}
 	Remove(bot, context)

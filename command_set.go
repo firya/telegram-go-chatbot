@@ -19,7 +19,8 @@ func Set(bot *gotgbot.Bot, context *ext.Context) error {
 		return Reply("Пример использования: <code>/set {гет} {значение}</code>\nИли отправь в ответ на какое-либо сообщение <code>/set {гет}</code>", *context)
 	}
 	if context.Message.ReplyToMessage == nil {
-		inputGet = context.Args()[2]
+		// Args() includes the command itself, so the get name is args[1].
+		inputGet = context.Args()[1]
 	} else {
 		inputGet = strings.Join(context.Args()[1:], " ")
 	}
@@ -39,7 +40,9 @@ func Set(bot *gotgbot.Bot, context *ext.Context) error {
 		get.Name = strings.ToLower(inputGet)
 		get.Title = inputGet
 		get.Type = "Text"
-		_, html, _ := strings.Cut(context.Message.OriginalHTML(), " ")
+		// Drop the command and the get name; the rest is the value.
+		_, rest, _ := strings.Cut(context.Message.OriginalHTML(), " ")
+		_, html, _ := strings.Cut(rest, " ")
 		get.Data = html
 	} else {
 		get.Name = strings.ToLower(inputGet)

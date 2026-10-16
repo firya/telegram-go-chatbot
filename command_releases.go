@@ -25,10 +25,13 @@ func countRune(s string, r rune) int {
 
 // Send releases of 2 weeks on /releases
 func Releases(bot *gotgbot.Bot, context *ext.Context) error {
-	var err error
-	resp, err := http.Get("https://ical-videogames.onrender.com/calendar?platform=ps4&platform=ps5&platform=switch&platform=xbox_one&platform=xbox_series&region=pal")
+	resp, err := httpClient().Get(Config.ReleasesUrl)
 	if err != nil {
 		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("releases feed %v: %v", Config.ReleasesUrl, resp.Status)
 	}
 	cal, err := ical.ParseCalendar(resp.Body)
 	if err != nil {

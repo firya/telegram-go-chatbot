@@ -180,7 +180,11 @@ func main() {
 	BotDispatcher.AddHandler(handlers.NewInlineQuery(nil, GetInline))
 	BotDispatcher.AddHandler(handlers.NewReaction(reaction.ChatID(Config.Chat), OnReaction))
 
-	go gotdClientInit()
+	go func() {
+		if err := gotdClientInit(); err != nil {
+			slog.Error("MTProto client stopped", "error", err)
+		}
+	}()
 
 	BotUpdater.Idle()
 }
