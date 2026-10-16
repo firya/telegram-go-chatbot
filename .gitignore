@@ -14,7 +14,7 @@
 .idea
 /bot.db
 /config.json
-.vscode/launch.json
+.vscode
 __debug_bin
 __debug_bin*
 bot.db-journal
