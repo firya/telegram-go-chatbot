@@ -2,10 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"image"
 	_ "image/png"
-	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -19,8 +17,7 @@ func Bonk(bot *gotgbot.Bot, context *ext.Context) error {
 	}
 	Remove(bot, context)
 
-	reader := base64.NewDecoder(base64.StdEncoding, strings.NewReader(bonk_png))
-	im, _, err := image.Decode(reader)
+	im, _, err := image.Decode(bytes.NewReader(bonkPNG))
 	if err != nil {
 		return err
 	}

@@ -15,6 +15,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY *.go ./
+COPY assets/ ./assets/
 RUN CGO_ENABLED=0 GOOS=linux go build -o /goapp
 
 ENTRYPOINT ["/goapp"]

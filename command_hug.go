@@ -2,10 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"image"
 	_ "image/png"
-	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -19,8 +17,7 @@ func Hug(bot *gotgbot.Bot, context *ext.Context) error {
 		return Reply("Просто отправь <code>/hug</code> в ответ на чье-либо сообщение.", *context)
 	}
 	Remove(bot, context)
-	reader := base64.NewDecoder(base64.StdEncoding, strings.NewReader(hug_png))
-	im, _, err := image.Decode(reader)
+	im, _, err := image.Decode(bytes.NewReader(hugPNG))
 	if err != nil {
 		return err
 	}
