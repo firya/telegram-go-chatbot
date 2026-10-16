@@ -100,7 +100,7 @@ func Meme(bot *gotgbot.Bot, ctx *ext.Context) error {
 			}
 			buf := bytes.Buffer{}
 			if err := protoDownload(protoCtx, func(callCtx context.Context) error {
-				_, err := downloader.NewDownloader().Download(api, docFile.AsInputDocumentFileLocation()).Stream(callCtx, &buf)
+				_, err := downloader.NewDownloader().Download(api, docFile.AsInputDocumentFileLocation("")).Stream(callCtx, &buf)
 				return err
 			}); err != nil {
 				return err
