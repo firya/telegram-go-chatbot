@@ -93,7 +93,6 @@ func Cur(bot *gotgbot.Bot, context *ext.Context) error {
 	if Config.CurrencyKey == "" {
 		return Reply("Конвертация валют не настроена", *context)
 	}
-	println(context.Args()[1])
 	if len(context.Args()) != 4 {
 		return Reply("Пример использования:\n/cur 1 USD RUB", *context)
 	}
