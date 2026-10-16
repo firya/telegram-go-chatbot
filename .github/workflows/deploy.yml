@@ -3,15 +3,51 @@ on:
   push:
     paths:
       - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/deploy.yml'
   pull_request:
     paths:
       - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/deploy.yml'
+permissions:
+  contents: read
+# One deploy at a time: two overlapping runs would restart the service mid-build.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
+  Test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+    - name: Vet
+      run: go vet ./...
+    - name: Test
+      run: go test -race -count=1 -timeout 300s -coverprofile=coverage.out ./...
+    - name: Coverage
+      run: go tool cover -func=coverage.out | tail -1
+    - name: Upload coverage
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage
+        path: coverage.out
   Deploy:
+    # Only a merged change on master reaches the server: a pull request runs the
+    # tests on GitHub's runner, never the sudo build/restart of the self-hosted one.
+    needs: Test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: self-hosted
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Build and install bot
       run: |
         go build -o telegram-go-chatbot
