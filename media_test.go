@@ -1,0 +1,298 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+)
+
+// fakeMediaFile points the getFile answer at a real generated media file, so
+// GetMedia finds the file locally and the media commands run end to end.
+func fakeMediaFile(t *testing.T, client *fakeBotClient, path string) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("generated media: %v", err)
+	}
+	client.setResult("getFile", json.RawMessage(fmt.Sprintf(`{"file_path":%q,"file_size":%d}`, path, info.Size())))
+}
+
+// TestConvert covers /convert: the usage notes and the real conversions of the
+// replied-to file. Without an argument the target is the media type itself, a
+// video sticker is offered as an animation.
+func TestConvert(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	// A command without a replied-to message explains itself.
+	if err := Convert(bot, testContext(bot, "/convert", testUser(42))); err != nil {
+		t.Fatalf("Convert (no reply): %v", err)
+	}
+	texts := client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "Пример использования") {
+		t.Errorf("Convert (no reply) sent %q, want the usage note", texts)
+	}
+
+	// A reply without a media file is refused.
+	client.clearCalls()
+	if err := Convert(bot, testReplyContext(bot, "/convert", testUser(42), &gotgbot.Message{Text: "текст"})); err != nil {
+		t.Fatalf("Convert (no media): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "Какого-либо медиа файла нет") {
+		t.Errorf("Convert (no media) sent %q, want the missing media note", texts)
+	}
+
+	for _, c := range []struct {
+		name, kind, arg, method string
+		reply                   *gotgbot.Message
+	}{
+		{"audio to ogg", "audio", "ogg", "sendVoice", &gotgbot.Message{Audio: &gotgbot.Audio{FileId: "aud1"}}},
+		{"video to gif", "video", "gif", "sendAnimation", &gotgbot.Message{Video: &gotgbot.Video{FileId: "vid1"}}},
+		{"video without argument stays a video", "video", "", "sendVideo", &gotgbot.Message{Video: &gotgbot.Video{FileId: "vid1"}}},
+		{"video sticker to gif", "video", "gif", "sendAnimation", &gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "stk1", IsVideo: true}}},
+		{"photo to jpg", "photo", "", "sendDocument", &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "pho1", FileSize: 10}}}},
+	} {
+		client.clearCalls()
+		input := ffmpegMedia(t, c.kind)
+		fakeMediaFile(t, client, input)
+
+		if err := Convert(bot, testReplyContext(bot, "/convert "+c.arg, testUser(42), c.reply)); err != nil {
+			t.Errorf("Convert (%s): %v", c.name, err)
+			continue
+		}
+		calls := client.callsFor(c.method)
+		if len(calls) != 1 {
+			t.Errorf("Convert (%s): %s calls = %d, want 1", c.name, c.method, len(calls))
+		}
+	}
+}
+
+// TestInvert covers /invert: the usage notes, the media types the reverse
+// filters refuse, and the reversed audio and video conversions.
+func TestInvert(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	if err := Invert(bot, testContext(bot, "/invert", testUser(42))); err != nil {
+		t.Fatalf("Invert (no reply): %v", err)
+	}
+	texts := client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "в ответ на какое-либо сообщение с видео") {
+		t.Errorf("Invert (no reply) sent %q, want the usage note", texts)
+	}
+
+	client.clearCalls()
+	if err := Invert(bot, testReplyContext(bot, "/invert", testUser(42), &gotgbot.Message{Text: "текст"})); err != nil {
+		t.Fatalf("Invert (no media): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "Какого-либо видео нет") {
+		t.Errorf("Invert (no media) sent %q, want the missing media note", texts)
+	}
+
+	// A photo has no reverse filter, and neither has a static sticker.
+	for _, c := range []struct {
+		name  string
+		reply *gotgbot.Message
+	}{
+		{"photo", &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "pho1", FileSize: 10}}}},
+		{"static sticker", &gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "stk1"}}},
+	} {
+		client.clearCalls()
+		if err := Invert(bot, testReplyContext(bot, "/invert", testUser(42), c.reply)); err != nil {
+			t.Fatalf("Invert (%s): %v", c.name, err)
+		}
+		texts = client.sentTexts()
+		if len(texts) != 1 || !strings.Contains(texts[0], "Неподдерживаемая операция") {
+			t.Errorf("Invert (%s) sent %q, want the unsupported-operation note", c.name, texts)
+		}
+	}
+
+	for _, c := range []struct {
+		name, kind, arg, method string
+		reply                   *gotgbot.Message
+	}{
+		{"audio to reversed audio", "audio", "mp3", "sendAudio", &gotgbot.Message{Audio: &gotgbot.Audio{FileId: "aud1"}}},
+		{"video to reversed video", "video", "mp4", "sendVideo", &gotgbot.Message{Video: &gotgbot.Video{FileId: "vid1"}}},
+	} {
+		client.clearCalls()
+		input := ffmpegMedia(t, c.kind)
+		fakeMediaFile(t, client, input)
+
+		if err := Invert(bot, testReplyContext(bot, "/invert "+c.arg, testUser(42), c.reply)); err != nil {
+			t.Errorf("Invert (%s): %v", c.name, err)
+			continue
+		}
+		if calls := client.callsFor(c.method); len(calls) != 1 {
+			t.Errorf("Invert (%s): %s calls = %d, want 1", c.name, c.method, len(calls))
+		}
+	}
+}
+
+// TestDistort covers /distort: the usage notes, the media types it refuses, the
+// busy flag, the per-file cache, the work directory guard, and the distorted
+// audio result.
+func TestDistort(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	oldBusy, oldCache := DistortBusy, DistortCache
+	t.Cleanup(func() { DistortBusy, DistortCache = oldBusy, oldCache })
+	DistortBusy = false
+	DistortCache = map[string]string{}
+
+	// The fake API must answer with a document, /distort stores its file id.
+	client.setResult("sendDocument", json.RawMessage(`{"message_id":1,"document":{"file_id":"doc1"}}`))
+	client.setResult("sendAudio", json.RawMessage(`{"message_id":1,"audio":{"file_id":"distorted1"}}`))
+
+	if err := Distort(bot, testContext(bot, "/distort", testUser(42))); err != nil {
+		t.Fatalf("Distort (no reply): %v", err)
+	}
+	texts := client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "в ответ на какое-либо сообщение с видео") {
+		t.Errorf("Distort (no reply) sent %q, want the usage note", texts)
+	}
+
+	client.clearCalls()
+	if err := Distort(bot, testReplyContext(bot, "/distort", testUser(42), &gotgbot.Message{Text: "текст"})); err != nil {
+		t.Fatalf("Distort (no media): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "Какого-либо видео нет") {
+		t.Errorf("Distort (no media) sent %q, want the missing media note", texts)
+	}
+
+	// Documents and video notes are not distorted.
+	client.clearCalls()
+	note := &gotgbot.Message{VideoNote: &gotgbot.VideoNote{FileId: "vn1"}}
+	if err := Distort(bot, testReplyContext(bot, "/distort", testUser(42), note)); err != nil {
+		t.Fatalf("Distort (video note): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "Неподдерживаемая операция") {
+		t.Errorf("Distort (video note) sent %q, want the unsupported-operation note", texts)
+	}
+
+	// One job at a time: while the flag is set the command answers it is busy.
+	client.clearCalls()
+	DistortBusy = true
+	input := ffmpegMedia(t, "audio")
+	fakeMediaFile(t, client, input)
+	if err := Distort(bot, testReplyContext(bot, "/distort", testUser(42),
+		&gotgbot.Message{Audio: &gotgbot.Audio{FileId: "aud1"}})); err != nil {
+		t.Fatalf("Distort (busy): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "Команда занята") {
+		t.Errorf("Distort (busy) sent %q, want the busy note", texts)
+	}
+	DistortBusy = false
+
+	// A cached result is sent straight away, without touching ffmpeg. The
+	// member status is pinned to creator so the result always goes into the
+	// chat: the private-message branch depends on the hour of the day.
+	client.clearCalls()
+	client.setMemberStatus(42, "creator")
+	DistortCache["aud1"] = "doc1"
+	if err := Distort(bot, testReplyContext(bot, "/distort", testUser(42),
+		&gotgbot.Message{Audio: &gotgbot.Audio{FileId: "aud1"}})); err != nil {
+		t.Fatalf("Distort (cache): %v", err)
+	}
+	calls := client.callsFor("sendDocument")
+	if len(calls) != 1 {
+		t.Fatalf("Distort (cache): sendDocument calls = %d, want 1", len(calls))
+	}
+	// The file id sits in an unexported field of the FileReader value, so the
+	// printed form is what can be checked here.
+	if got := fmt.Sprintf("%+v", calls[0].Params["document"]); !strings.Contains(got, "doc1") {
+		t.Errorf("Distort (cache): document = %v, want the cached file id", calls[0].Params["document"])
+	}
+	if calls[0].Params["chat_id"] != int64(-100) {
+		t.Errorf("Distort (cache): chat_id = %v, want the chat of the request", calls[0].Params["chat_id"])
+	}
+	if texts := client.sentTexts(); len(texts) != 0 {
+		t.Errorf("Distort (cache) sent %q, want only the cached document", texts)
+	}
+	delete(DistortCache, "aud1")
+
+	// The work directory is created per file id, and a failure to create it is
+	// reported as the file being in progress already. A file id with a slash in
+	// it makes that plain Mkdir fail, which is the cheapest way to reach the
+	// guard: the handler wipes its parent directory when it exists, so a marker
+	// file left there would not survive to the check.
+	client.clearCalls()
+	parent := fmt.Sprintf("%v/telegram-go-chatbot-distort", os.TempDir())
+	os.RemoveAll(parent)
+	if err := Distort(bot, testReplyContext(bot, "/distort", testUser(42),
+		&gotgbot.Message{Audio: &gotgbot.Audio{FileId: "aud/1"}})); err != nil {
+		t.Fatalf("Distort (work dir): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "Обработка файла уже выполняется") {
+		t.Errorf("Distort (work dir) sent %q, want the in-progress note", texts)
+	}
+	if DistortBusy {
+		t.Errorf("Distort (work dir): the busy flag is left set")
+	}
+	os.RemoveAll(parent)
+
+	// The audio path distorts the file with the vibrato filter and sends it.
+	client.clearCalls()
+	input = ffmpegMedia(t, "audio")
+	fakeMediaFile(t, client, input)
+	if err := Distort(bot, testReplyContext(bot, "/distort", testUser(42),
+		&gotgbot.Message{Audio: &gotgbot.Audio{FileId: "aud1"}})); err != nil {
+		t.Fatalf("Distort (audio): %v", err)
+	}
+	if calls := client.callsFor("sendAudio"); len(calls) != 1 {
+		t.Errorf("Distort (audio): sendAudio calls = %d, want 1", len(calls))
+	}
+	if DistortCache["aud1"] != "distorted1" {
+		t.Errorf("Distort (audio): cache = %q, want the file id of the result", DistortCache["aud1"])
+	}
+	if DistortBusy {
+		t.Errorf("Distort (audio): the busy flag is left set")
+	}
+}
+
+// TestMp3 covers /mp3 without yt-dlp: the usage note, the missing link and the
+// download failure. The reaction on the requested message is sent first.
+func TestMp3(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	// Nothing to download from.
+	if err := Mp3(bot, testContext(bot, "/mp3", testUser(42))); err != nil {
+		t.Fatalf("Mp3 (no reply): %v", err)
+	}
+	texts := client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "Пример использования") {
+		t.Errorf("Mp3 (no reply) sent %q, want the usage note", texts)
+	}
+
+	// An argument without a link in it is reported as an error, after the
+	// "watching" reaction is put on the message.
+	client.clearCalls()
+	if err := Mp3(bot, testContext(bot, "/mp3 не ссылка", testUser(42))); err == nil ||
+		!strings.Contains(err.Error(), "ссылок не найдено") {
+		t.Errorf("Mp3 (no link): err = %v, want the missing link error", err)
+	}
+	if calls := client.callsFor("setMessageReaction"); len(calls) != 1 {
+		t.Errorf("Mp3 (no link): setMessageReaction calls = %d, want 1", len(calls))
+	}
+
+	// A link yt-dlp cannot handle ends with the downloader error, and no audio
+	// is sent.
+	client.clearCalls()
+	msg := testMessage("/mp3 https://example.invalid/watch", testUser(42))
+	msg.Entities = []gotgbot.MessageEntity{{Type: "url", Offset: 5, Length: int64(len("https://example.invalid/watch")), Url: "https://example.invalid/watch"}}
+	if err := Mp3(bot, ext.NewContext(bot, &gotgbot.Update{UpdateId: 1, Message: msg}, nil)); err == nil {
+		t.Errorf("Mp3 (bad link): err = nil, want the downloader error")
+	}
+	if calls := client.callsFor("sendAudio"); len(calls) != 0 {
+		t.Errorf("Mp3 (bad link): sendAudio calls = %d, want 0", len(calls))
+	}
+}

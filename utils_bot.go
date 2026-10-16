@@ -52,6 +52,14 @@ func BotInit() error {
 		UnhandledErrFunc: ErrorReporting,
 	})
 
+	// The globals go in before polling or the webhook server start: the updater
+	// reports its failures through ErrorReporting, which answers on the global
+	// Bot. A first request that fails (proxy down, 401) used to dereference the
+	// nil global in a goroutine and take the whole process down.
+	Bot = bot
+	BotDispatcher = dispatcher
+	BotUpdater = updater
+
 	connectionType := ""
 	if Config.EndpointPublicURL != "" || Config.Listen != "" {
 		connectionType = "webhook"
@@ -117,15 +125,18 @@ func BotInit() error {
 		}
 	}
 
-	Bot = bot
-	BotDispatcher = dispatcher
-	BotUpdater = updater
-
 	return nil
 }
 
+// ErrorReporting is the last resort for errors the dispatcher cannot answer:
+// the sysadmin of config.json gets the text with the token removed. Without a
+// sysadmin, or before the bot exists, it stays in the log.
 func ErrorReporting(err error) {
 	Logger.Error(err.Error())
+
+	if Bot == nil || Config.SysAdmin == 0 {
+		return
+	}
 	Bot.SendMessage(Config.SysAdmin, strings.ReplaceAll(err.Error(), Config.Token, "TOKEN"), &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
 }
 

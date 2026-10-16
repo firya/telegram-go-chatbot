@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 86 исходников `.go`, 99 тестов в 13 файлах
+- 86 исходников `.go`, 129 тестов в 21 файле
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -133,7 +133,7 @@ CI (`.github/workflows/`):
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 99 тестов, ~15–30 с
+go test -race -count=1 ./...                                   # 129 тестов, ~25–40 с
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
@@ -143,8 +143,17 @@ PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # прове�
 - хелперы `setupTestEnv`, `testMessage`, `testContext`, `testCallbackContext`, `seedUser`,
   `waitForCalls`.
 
-Сети, Postgres и внешних бинарников тесты не требуют. Учитывайте: тесты идут на SQLite, прод — на
-PostgreSQL, поэтому поведение БД в проде тестами не доказывается.
+Сети и Postgres тесты не требуют. Учитывайте: тесты идут на SQLite, прод — на PostgreSQL, поэтому
+поведение БД в проде тестами не доказывается (`TestDataBaseInit` проверяет только пути отказа).
+Три теста зависят от окружения и пропускаются без него: `TestFFmpegConvert` гоняет настоящие
+`ffmpeg`/`ffprobe` по сгенерированным секундным файлам (пропускается, если бинарников нет),
+`TestMtprotoConnectProbe` — без `PROTO_PROBE=1`, `TestYtdlpGetVer` — без установленного `yt-dlp`.
+
+Особые приёмы в четырёх тестах: `TestRestart` запускает процесс заново (`os.Exit` внутри обработчика
+нельзя проверить из того же процесса), `TestConfigInit` работает в `t.TempDir()`, чтобы не трогать
+`config.json` чекаута, `/ai` (`TestAIStream`, `TestAIStreamError`) отвечает на локальный
+`httptest`-эндпоинт в формате OpenAI, `TestBotInit` поднимает бота на локальной заглушке Bot API
+(`getMe`, удаление вебхука, polling, отчёт сисадмину) — наружу тесты не ходят.
 
 ## Структура
 
@@ -203,7 +212,7 @@ assets/              PNG стикеров (go:embed) и CREDITS.md про их �
 
 | Модель (`model_name`) | Что это | В этом репозитории |
 |---|---|---|
-| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, README |
+| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, фиксы старта бота и `/ai`, тесты `config.json`/меню команд, README |
 | `qwen3.8-flash-next-iq3_xxs` | Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | `e55e505` (go:embed), `30415bd` (тесты хелперов + фикс `RandInt`) |
 | `qwen3.8-flash-next` | она же, до отдельного кванта | `4ab27c5` — первый ИИ-коммит (`bot_api_url` для всех API-вызовов) |
 | `orcarouter-qwen3.8-flash-next-uncensored-iq3_xxs` | Qwen3.8-Flash-Next Uncensored, IQ3_XXS | настроена в `~/.strata`, к этому коду не применялась |

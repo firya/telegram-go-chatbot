@@ -28,10 +28,6 @@ func Mp3(bot *gotgbot.Bot, context *ext.Context) error {
 		})
 	}
 
-	context.EffectiveMessage.SetReaction(Bot, &gotgbot.SetMessageReactionOpts{
-		Reaction: []gotgbot.ReactionType{gotgbot.ReactionTypeEmoji{Emoji: "👀"}},
-	})
-
 	link := ""
 	message := &gotgbot.Message{}
 

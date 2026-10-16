@@ -29,35 +29,11 @@ var BotDispatcher *ext.Dispatcher
 var BotUpdater *ext.Updater
 var Logger *slog.Logger
 
-func main() {
-	Logger = slog.Default()
-	slog.SetDefault(Logger)
-	slog.SetLogLoggerLevel(slog.LevelDebug)
-	slog.Info("init: config")
-	err := ConfigInit()
-	if err != nil {
-		slog.Error(fmt.Sprintf("config init failed: %s", err))
-		panic(fmt.Errorf("config init failed: %s", err))
-	}
-	slog.Info("init: database")
-	DB, err = DataBaseInit(Config.DSN)
-	if err != nil {
-		slog.Error(fmt.Sprintf("database init failed: %s", err))
-		panic(fmt.Errorf("database init failed: %s", err))
-	}
-	slog.Info("init: bot")
-	err = BotInit()
-	if err != nil {
-		slog.Error(fmt.Sprintf("bot init failed: %s", err))
-		panic(fmt.Errorf("bot init failed: %s", err))
-	}
-	// slog.Info("init: ai")
-	// err = AiInit()
-	// if err != nil {
-	// 	slog.Error(fmt.Sprintf("ai init failed: %s", err))
-	// 	fmt.Printf("ai init failed: %s", err)
-	// }
-	commandList := []commandList{
+// commandListConfig is the command menu of the bot: the name Telegram shows in
+// the chat and the handler behind it. It is a function and not a literal in
+// main, so the menu can be checked without starting the bot.
+func commandListConfig() []commandList {
+	return []commandList{
 		{gotgbot.BotCommand{Command: "releases", Description: "список релизов", IsEphemeral: true}, Releases},
 		{gotgbot.BotCommand{Command: "russianroulette", Description: "вызвать на дуэль кого-нибудь", IsEphemeral: true}, Request},
 		{gotgbot.BotCommand{Command: "savetopm", Description: "сохранить пост в личку", IsEphemeral: true}, SaveToPM},
@@ -152,6 +128,37 @@ func main() {
 		{gotgbot.BotCommand{Command: "testrandom", Description: "протестировать рандом бота", IsEphemeral: true}, TestRandom},
 		{gotgbot.BotCommand{Command: "remove", Description: "удалить сообщение", IsEphemeral: true}, RemoveReplyMessage},
 	}
+}
+
+func main() {
+	Logger = slog.Default()
+	slog.SetDefault(Logger)
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.Info("init: config")
+	err := ConfigInit()
+	if err != nil {
+		slog.Error(fmt.Sprintf("config init failed: %s", err))
+		panic(fmt.Errorf("config init failed: %s", err))
+	}
+	slog.Info("init: database")
+	DB, err = DataBaseInit(Config.DSN)
+	if err != nil {
+		slog.Error(fmt.Sprintf("database init failed: %s", err))
+		panic(fmt.Errorf("database init failed: %s", err))
+	}
+	slog.Info("init: bot")
+	err = BotInit()
+	if err != nil {
+		slog.Error(fmt.Sprintf("bot init failed: %s", err))
+		panic(fmt.Errorf("bot init failed: %s", err))
+	}
+	// slog.Info("init: ai")
+	// err = AiInit()
+	// if err != nil {
+	// 	slog.Error(fmt.Sprintf("ai init failed: %s", err))
+	// 	fmt.Printf("ai init failed: %s", err)
+	// }
+	commandList := commandListConfig()
 
 	Bot.DeleteMyCommands(&gotgbot.DeleteMyCommandsOpts{Scope: gotgbot.BotCommandScopeAllPrivateChats{}})
 	Bot.DeleteMyCommands(&gotgbot.DeleteMyCommandsOpts{Scope: gotgbot.BotCommandScopeAllGroupChats{}})

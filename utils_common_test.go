@@ -2,6 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -164,13 +170,13 @@ type marshalInner struct {
 }
 
 type marshalOuter struct {
-	Name    string        `json:"name"`
-	Zero    int           `json:"zero"`
-	Tagged  string        `json:"tagged_field,omitempty,string"`
-	Skipped string        `json:"-"`
+	Name    string `json:"name"`
+	Zero    int    `json:"zero"`
+	Tagged  string `json:"tagged_field,omitempty,string"`
+	Skipped string `json:"-"`
 	private string
-	Nested  marshalInner  `json:"nested"`
-	NoTag   bool          `json:""`
+	Nested  marshalInner   `json:"nested"`
+	NoTag   bool           `json:""`
 	Items   []marshalInner `json:"items"`
 }
 
@@ -249,5 +255,409 @@ func TestMarshalOmitEmptyAll_PointerAndNonStruct(t *testing.T) {
 	}
 	if string(data) != `["a","b"]` {
 		t.Errorf("MarshalOmitEmptyAll(slice) = %s, want [\"a\",\"b\"]", data)
+	}
+}
+
+func TestIsContainsMedia(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  gotgbot.Message
+		want bool
+	}{
+		{"text", gotgbot.Message{Text: "привет"}, false},
+		{"photo", gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "p"}}}, true},
+		{"voice", gotgbot.Message{Voice: &gotgbot.Voice{FileId: "v"}}, true},
+		{"audio", gotgbot.Message{Audio: &gotgbot.Audio{FileId: "a"}}, true},
+		{"animation", gotgbot.Message{Animation: &gotgbot.Animation{FileId: "an"}}, true},
+		{"sticker", gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "s"}}, true},
+		{"document", gotgbot.Message{Document: &gotgbot.Document{FileId: "d"}}, true},
+		{"video", gotgbot.Message{Video: &gotgbot.Video{FileId: "vi"}}, true},
+		{"video note", gotgbot.Message{VideoNote: &gotgbot.VideoNote{FileId: "vn"}}, true},
+		// Attachments that are not files are not media for the bot.
+		{"contact", gotgbot.Message{Contact: &gotgbot.Contact{}}, false},
+		{"location", gotgbot.Message{Location: &gotgbot.Location{}}, false},
+		{"poll", gotgbot.Message{Poll: &gotgbot.Poll{}}, false},
+	}
+
+	for _, c := range cases {
+		if got := IsContainsMedia(&c.msg); got != c.want {
+			t.Errorf("IsContainsMedia(%s) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestDownloadFile(t *testing.T) {
+	stubProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.RequestURI, "/ok.bin") {
+			fmt.Fprint(w, "media bytes")
+			return
+		}
+		http.Error(w, "file not found", http.StatusNotFound)
+	})
+
+	dir := t.TempDir()
+
+	path := filepath.Join(dir, "ok.bin")
+	if err := DownloadFile(path, "http://example.invalid/ok.bin"); err != nil {
+		t.Fatalf("DownloadFile: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("DownloadFile: read back: %v", err)
+	}
+	if string(body) != "media bytes" {
+		t.Errorf("DownloadFile wrote %q, want the response body", body)
+	}
+
+	// An expired Bot API file link must not be written out as a media file.
+	missing := filepath.Join(dir, "missing.bin")
+	if err := DownloadFile(missing, "http://example.invalid/missing.bin"); err == nil ||
+		!strings.Contains(err.Error(), "404") {
+		t.Errorf("DownloadFile (404): err = %v, want the status error", err)
+	}
+	// The file is created before the request, so a failed download leaves it empty.
+	if info, err := os.Stat(missing); err != nil || info.Size() != 0 {
+		t.Errorf("DownloadFile (404): file = %v, want an empty file left behind", info)
+	}
+}
+
+// ffmpegMedia writes a tiny media file with the system ffmpeg and returns its path.
+func ffmpegMedia(t *testing.T, kind string) string {
+	t.Helper()
+
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe is not installed")
+	}
+
+	ext, inputs := "mp3", []string{"-f", "lavfi", "-i", "sine=frequency=440:duration=1"}
+	switch kind {
+	case "photo":
+		ext, inputs = "jpg", []string{"-f", "lavfi", "-i", "testsrc=size=128x96:rate=1", "-frames:v", "1"}
+	case "video":
+		ext, inputs = "mp4", []string{"-f", "lavfi", "-i", "testsrc=duration=1:size=128x96:rate=10",
+			"-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-shortest"}
+	case "video_only":
+		ext, inputs = "mp4", []string{"-f", "lavfi", "-i", "testsrc=duration=1:size=128x96:rate=10", "-an"}
+	case "long_video":
+		ext, inputs = "mp4", []string{"-f", "lavfi", "-i", "testsrc=duration=121:size=128x96:rate=10",
+			"-f", "lavfi", "-i", "sine=frequency=440:duration=121"}
+	}
+
+	path := filepath.Join(t.TempDir(), "input_"+kind+"."+ext)
+	cmd := exec.Command("ffmpeg", append([]string{"-hide_banner", "-loglevel", "fatal"}, append(inputs, []string{"-y", path}...)...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg: %v\n%s", err, out)
+	}
+	return path
+}
+
+// TestFFmpegConvert runs the real ffmpeg/ffprobe on generated 1-second files.
+// The conversions the bot offers fall back between tracks: an audio file asked
+// to become a video is sent as audio, a video without audio asked to become an
+// mp3 is sent as an animation.
+func TestFFmpegConvert(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	for _, c := range []struct {
+		name, kind, targetType, method string
+	}{
+		{"audio to mp3", "audio", "mp3", "sendAudio"},
+		{"audio to ogg", "audio", "ogg", "sendVoice"},
+		{"video to mp4", "video", "mp4", "sendVideo"},
+		{"video to gif", "video", "gif", "sendAnimation"},
+		{"video to jpg", "video", "jpg", "sendDocument"},
+		{"audio asked for a video becomes audio", "audio", "video", "sendAudio"},
+		{"video without audio asked for mp4 becomes an animation", "video_only", "mp4", "sendAnimation"},
+	} {
+		input := ffmpegMedia(t, c.kind)
+		media := Media{FileName: filepath.Base(input), FilePath: input}
+
+		if err := FFmpegConvert(testContext(bot, "/convert", testUser(42)), media, c.targetType); err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		calls := client.callsFor(c.method)
+		if len(calls) != 1 {
+			t.Errorf("%s: %s calls = %d, want 1", c.name, c.method, len(calls))
+			continue
+		}
+		if calls[0].Params["chat_id"] != int64(-100) {
+			t.Errorf("%s: %s chat_id = %v, want -100", c.name, c.method, calls[0].Params["chat_id"])
+		}
+		client.Calls = nil
+	}
+
+	// A video without an audio track cannot be converted to audio formats.
+	videoOnly := ffmpegMedia(t, "video_only")
+	if err := FFmpegConvert(testContext(bot, "/convert", testUser(42)),
+		Media{FileName: filepath.Base(videoOnly), FilePath: videoOnly}, "mp3"); err == nil ||
+		!strings.Contains(err.Error(), "аудио-дорожка") {
+		t.Errorf("FFmpegConvert (video only to mp3): err = %v, want the missing audio track", err)
+	}
+
+	// An audio file has no video track for the animation targets.
+	audio := ffmpegMedia(t, "audio")
+	if err := FFmpegConvert(testContext(bot, "/convert", testUser(42)),
+		Media{FileName: filepath.Base(audio), FilePath: audio}, "gif"); err == nil ||
+		!strings.Contains(err.Error(), "видео-дорожка") {
+		t.Errorf("FFmpegConvert (audio to gif): err = %v, want the missing video track", err)
+	}
+
+	// Reverse and loop effects are refused on long videos.
+	long := ffmpegMedia(t, "long_video")
+	if err := FFmpegConvert(testContext(bot, "/convert", testUser(42)),
+		Media{FileName: filepath.Base(long), FilePath: long}, "reverse"); err == nil ||
+		!strings.Contains(err.Error(), "слишком длинное") {
+		t.Errorf("FFmpegConvert (2 minutes to reverse): err = %v, want the length refusal", err)
+	}
+
+	// An unknown target type is reported, not sent as a document.
+	video := ffmpegMedia(t, "video")
+	if err := FFmpegConvert(testContext(bot, "/convert", testUser(42)),
+		Media{FileName: filepath.Base(video), FilePath: video}, "xyz"); err == nil ||
+		!strings.Contains(err.Error(), "not supported") {
+		t.Errorf("FFmpegConvert (xyz): err = %v, want the unsupported target", err)
+	}
+
+	// The converted file is removed after sending.
+	leftovers, err := filepath.Glob(filepath.Join(os.TempDir(), "*_converted.*"))
+	if err != nil {
+		t.Fatalf("glob temp dir: %v", err)
+	}
+	if len(leftovers) != 0 {
+		t.Errorf("converted files left in the temp dir: %v", leftovers)
+	}
+}
+
+// TestGetMedia covers the media picker: the largest photo size, the fields
+// copied from the message, the Bot API file path, the file cached in
+// bot_api_datadir and the getFile failure.
+func TestGetMedia(t *testing.T) {
+	_, client := setupTestEnv(t)
+
+	oldDataDir, oldToken := Config.BotApiDataDir, Config.Token
+	t.Cleanup(func() { Config.BotApiDataDir, Config.Token = oldDataDir, oldToken })
+	Config.BotApiDataDir = t.TempDir()
+	Config.Token = "tok"
+
+	client.setResult("getFile", json.RawMessage(`{"file_path":"photos/p.jpg","file_size":10}`))
+
+	msg := &gotgbot.Message{
+		Photo: []gotgbot.PhotoSize{
+			{FileId: "small", FileSize: 10},
+			{FileId: "large", FileSize: 100, Width: 8, Height: 6},
+			{FileId: "mid", FileSize: 50},
+		},
+		Caption:               "подпись",
+		HasMediaSpoiler:       true,
+		ShowCaptionAboveMedia: true,
+		MediaGroupId:          "g1",
+	}
+
+	media, err := GetMedia(msg)
+	if err != nil {
+		t.Fatalf("GetMedia (photo): %v", err)
+	}
+	if media.Type != "photo" || media.FileID != "large" {
+		t.Errorf("GetMedia (photo) = %v/%v, want the largest photo size", media.Type, media.FileID)
+	}
+	if media.Width != 8 || media.Height != 6 || media.FileSize != 100 {
+		t.Errorf("GetMedia (photo) = %vx%v, %v bytes, want 8x6 and 100 bytes", media.Width, media.Height, media.FileSize)
+	}
+	if media.Caption != "подпись" || !media.HasSpoiler || !media.ShowCaptionAboveMedia || media.MediaGroupId != "g1" {
+		t.Errorf("GetMedia (photo) caption fields = %+v, want the caption fields of the message", media)
+	}
+	if media.FilePath != "photos/p.jpg" || media.FileName != "p.jpg" {
+		t.Errorf("GetMedia (photo) = %q/%q, want the Bot API file path and its base name", media.FilePath, media.FileName)
+	}
+	if media.FileURL == "" {
+		t.Errorf("GetMedia (photo): FileURL is empty")
+	}
+
+	// A file cached under bot_api_datadir/<token> wins over the API path.
+	local := filepath.Join(Config.BotApiDataDir, Config.Token, "photos", "p.jpg")
+	if err := os.MkdirAll(filepath.Dir(local), 0o755); err != nil {
+		t.Fatalf("create datadir: %v", err)
+	}
+	if err := os.WriteFile(local, []byte("cached"), 0o644); err != nil {
+		t.Fatalf("write the cached file: %v", err)
+	}
+	media, err = GetMedia(msg)
+	if err != nil {
+		t.Fatalf("GetMedia (cached): %v", err)
+	}
+	if media.FilePath != local {
+		t.Errorf("GetMedia (cached) FilePath = %q, want the datadir file %q", media.FilePath, local)
+	}
+
+	for _, c := range []struct {
+		name, wantType, wantID string
+		msg                    gotgbot.Message
+	}{
+		{"voice", "voice", "v", gotgbot.Message{Voice: &gotgbot.Voice{FileId: "v", Duration: 3}}},
+		{"audio", "audio", "a", gotgbot.Message{Audio: &gotgbot.Audio{FileId: "a", Duration: 4}}},
+		{"animation", "animation", "an", gotgbot.Message{Animation: &gotgbot.Animation{FileId: "an", Duration: 5}}},
+		{"sticker", "sticker", "s", gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "s"}}},
+		{"video", "video", "vi", gotgbot.Message{Video: &gotgbot.Video{FileId: "vi", Duration: 6}}},
+		{"video note", "video_note", "vn", gotgbot.Message{VideoNote: &gotgbot.VideoNote{FileId: "vn", Duration: 7}}},
+		{"document", "document", "d", gotgbot.Message{Document: &gotgbot.Document{FileId: "d"}}},
+	} {
+		m, err := GetMedia(&c.msg)
+		if err != nil {
+			t.Errorf("GetMedia (%s): %v", c.name, err)
+			continue
+		}
+		if m.Type != c.wantType || m.FileID != c.wantID {
+			t.Errorf("GetMedia (%s) = %v/%v, want %v/%v", c.name, m.Type, m.FileID, c.wantType, c.wantID)
+		}
+	}
+
+	// The file path comes from the Bot API, so its failure is fatal.
+	client.setError("getFile", errors.New("file is gone"))
+	if _, err := GetMedia(msg); err == nil {
+		t.Errorf("GetMedia (getFile failure): err = nil, want the API error")
+	}
+}
+
+// TestReplyAndRemove covers the self-destructing answer: the note is appended to
+// the text, and the deletion is scheduled only for a message with a real id. The
+// 30 second timer itself is not waited out by the test.
+func TestReplyAndRemove(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	ctx := testContext(bot, "/foo", testUser(42))
+	ctx.Message.MessageId = 0
+	if err := ReplyAndRemove("готово", *ctx); err != nil {
+		t.Fatalf("ReplyAndRemove: %v", err)
+	}
+	texts := client.sentTexts()
+	if len(texts) != 1 || !strings.HasSuffix(texts[0], "готово\n\nЭто сообщение самоуничтожится через 30 секунд.") {
+		t.Errorf("ReplyAndRemove sent %q, want the text with the self-destruct note", texts)
+	}
+	if calls := client.callsFor("deleteMessage"); len(calls) != 0 {
+		t.Errorf("ReplyAndRemove: deleteMessage calls = %d, want none for a message without an id", len(calls))
+	}
+}
+
+// TestStatsCounters covers the counters behind the statistics: statsIncrease
+// creates the row of a day and increments it, getWordID stores one row per
+// stemmed word, and the refusal and blessing pools answer from the database.
+func TestStatsCounters(t *testing.T) {
+	setupTestEnv(t)
+
+	day := GetStartOfDay()
+
+	// The first call of a day creates the row with a count of one.
+	statsIncrease(1, day, 42)
+	var row Stats
+	if err := DB.Where("stat_type = ? AND day_timestamp = ? AND context_id = ?", 1, day, 42).First(&row).Error; err != nil {
+		t.Fatalf("statsIncrease: %v", err)
+	}
+	if row.Count != 1 {
+		t.Errorf("statsIncrease: Count = %v, want 1", row.Count)
+	}
+	if row.LastUpdate <= 0 {
+		t.Errorf("statsIncrease: LastUpdate = %v, want the current time", row.LastUpdate)
+	}
+
+	// The next calls increment the same row.
+	statsIncrease(1, day, 42)
+	statsIncrease(1, day, 42)
+	row = Stats{}
+	if err := DB.Where("stat_type = ? AND day_timestamp = ? AND context_id = ?", 1, day, 42).First(&row).Error; err != nil {
+		t.Fatalf("statsIncrease: %v", err)
+	}
+	if row.Count != 3 {
+		t.Errorf("statsIncrease: Count = %v, want 3", row.Count)
+	}
+
+	// Another context is a row of its own.
+	statsIncrease(1, day, 43)
+	row = Stats{}
+	if err := DB.Where("stat_type = ? AND day_timestamp = ? AND context_id = ?", 1, day, 43).First(&row).Error; err != nil {
+		t.Fatalf("statsIncrease: %v", err)
+	}
+	if row.Count != 1 {
+		t.Errorf("statsIncrease (other context): Count = %v, want 1", row.Count)
+	}
+	row = Stats{}
+	if err := DB.Where("stat_type = ? AND day_timestamp = ? AND context_id = ?", 1, day, 42).First(&row).Error; err != nil {
+		t.Fatalf("statsIncrease: %v", err)
+	}
+	if row.Count != 3 {
+		t.Errorf("statsIncrease: Count = %v, want the first context to stay at 3", row.Count)
+	}
+
+	// Words are stored once per stem, and the stem of the same word is stable.
+	first := getWordID("покупал")
+	again := getWordID("покупал")
+	if first == 0 || first != again {
+		t.Errorf("getWordID = %v and %v, want the same row for the same word", first, again)
+	}
+	other := getWordID("кот")
+	if other == 0 || other == first {
+		t.Errorf("getWordID = %v and %v, want separate rows for different words", first, other)
+	}
+	var words []StatsWords
+	if err := DB.Find(&words).Error; err != nil {
+		t.Fatalf("read stats_words: %v", err)
+	}
+	if len(words) != 2 {
+		t.Fatalf("stats_words rows = %d, want 2", len(words))
+	}
+	if words[0].Word != "покупал" || words[0].ShortWord == "" {
+		t.Errorf("stats_words[0] = %+v, want the word with its stem", words[0])
+	}
+
+	// The pools are seeded by the test harness.
+	if got := GetNope(); got != "нет" {
+		t.Errorf("GetNope = %q, want the seeded refusal", got)
+	}
+	if got := GetBless(); got != "да" {
+		t.Errorf("GetBless = %q, want the seeded blessing", got)
+	}
+}
+
+// TestGetUserFromDB covers the user lookup behind /getid and friends: by
+// @username in any case, by numeric id, and the answers for an empty string, a
+// non-number, a zero id and an unknown user.
+func TestGetUserFromDB(t *testing.T) {
+	setupTestEnv(t)
+	seedUser(42, "testpupkin", "Тест")
+	seedUser(77, "Vavka", "Вавка")
+
+	// By username: the lookup lowercases both sides.
+	user, err := GetUserFromDB("@testpupkin")
+	if err != nil || user.Id != 42 {
+		t.Errorf("GetUserFromDB(@testpupkin) = %+v, %v, want the user 42", user, err)
+	}
+	user, err = GetUserFromDB("@TESTPUPKIN")
+	if err != nil || user.Id != 42 {
+		t.Errorf("GetUserFromDB(@TESTPUPKIN) = %+v, %v, want the user 42", user, err)
+	}
+
+	// By id: the row is read back with its username.
+	user, err = GetUserFromDB("77")
+	if err != nil || user.Username != "Vavka" {
+		t.Errorf("GetUserFromDB(77) = %+v, %v, want the user with the username Vavka", user, err)
+	}
+
+	// Nothing to look for, a word instead of an id, and an id of zero.
+	if _, err := GetUserFromDB(""); err == nil {
+		t.Errorf("GetUserFromDB (empty): err = nil, want the not-found error")
+	}
+	if _, err := GetUserFromDB("abc"); err == nil {
+		t.Errorf("GetUserFromDB (not a number): err = nil, want the parse error")
+	}
+	if _, err := GetUserFromDB("0"); err == nil {
+		t.Errorf("GetUserFromDB (zero): err = nil, want the not-found error")
+	}
+
+	// A number nobody has: the database reports no rows.
+	if _, err := GetUserFromDB("99999"); err == nil {
+		t.Errorf("GetUserFromDB (unknown id): err = nil, want the missing row error")
 	}
 }

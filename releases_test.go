@@ -90,3 +90,26 @@ func TestHTTPClientUsesProxy(t *testing.T) {
 		t.Errorf("proxy saw %q, want the absolute target URL", seen)
 	}
 }
+
+// TestCountRune counts one rune in a string. The releases feed uses it to find
+// the separators, so it must count runes and not bytes.
+func TestCountRune(t *testing.T) {
+	for _, c := range []struct {
+		s    string
+		r    rune
+		want int
+	}{
+		{"", '•', 0},
+		{"нет", '•', 0},
+		{"•", '•', 1},
+		{"•••", '•', 3},
+		{"а•б•", '•', 2},
+		{"abc", 'a', 1},
+		{"😀😀x", '😀', 2},
+		{"a😀b", '😀', 1},
+	} {
+		if got := countRune(c.s, c.r); got != c.want {
+			t.Errorf("countRune(%q, %q) = %v, want %v", c.s, c.r, got, c.want)
+		}
+	}
+}

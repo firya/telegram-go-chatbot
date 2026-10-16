@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 86 `.go` source files, 99 tests in 13 files
+- 86 `.go` source files, 129 tests in 21 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -134,7 +134,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 99 tests, ~15–30 s
+go test -race -count=1 ./...                                   # 129 tests, ~25–40 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
@@ -144,8 +144,18 @@ The test infrastructure is `testutils_test.go`:
 - helpers `setupTestEnv`, `testMessage`, `testContext`, `testCallbackContext`, `seedUser`,
   `waitForCalls`.
 
-Tests need no network, no Postgres and no external binaries. Note that tests run on SQLite while
-production runs on PostgreSQL, so production database behaviour is not proven by the tests.
+Tests need no network and no Postgres. Note that tests run on SQLite while production runs on
+PostgreSQL, so production database behaviour is not proven by the tests (`TestDataBaseInit` only
+checks the failure paths). Three tests depend on the environment and skip without it:
+`TestFFmpegConvert` runs the real `ffmpeg`/`ffprobe` over generated one-second files (it skips when
+the binaries are missing), `TestMtprotoConnectProbe` skips without `PROTO_PROBE=1`, and
+`TestYtdlpGetVer` skips without an installed `yt-dlp`.
+
+Four tests use special tricks: `TestRestart` reruns the process (`os.Exit` inside the handler cannot
+be checked from the same process), `TestConfigInit` works inside `t.TempDir()` so the `config.json`
+of the checkout is never touched, and `/ai` (`TestAIStream`, `TestAIStreamError`) answers a local
+`httptest` endpoint in the OpenAI format. `TestBotInit` brings the bot up against a local Bot API
+stand-in (`getMe`, webhook deletion, polling, the sysadmin report) — tests never leave the machine.
 
 ## Layout
 

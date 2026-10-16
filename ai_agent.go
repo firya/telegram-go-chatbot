@@ -42,6 +42,9 @@ func AI(bot *gotgbot.Bot, context *ext.Context) error {
 			time.Sleep(time.Second * 5)
 		}
 	}()
+	// The typing loop only stops when the handler is done; without this the
+	// goroutine sends a chat action every five seconds forever.
+	defer close(done)
 
 	msgText := strings.Join(slices.Delete(context.Args(), 0, 1), " ")
 

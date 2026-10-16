@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"sync"
@@ -34,12 +36,28 @@ type fakeBotClient struct {
 	mu           sync.Mutex
 	Calls        []fakeCall
 	Results      map[string]json.RawMessage // per-test canned results, override defaults
+	Errors       map[string]error           // per-test API failures, checked before the results
 	MemberStatus map[int64]string           // per-user getChatMember status overrides
 }
+
+// sentMessageResult is the answer every "send…" method returns by default, so
+// handlers that read the id or the chat of the message they just sent see a
+// real one instead of a zero value.
+const sentMessageResult = `{"message_id":555,"chat":{"id":-100,"type":"group","title":"test chat"}}`
 
 // defaultFakeResults covers methods used by the bot: bool-returning methods
 // get "true", object-returning methods get "{}" (empty object) by default.
 var defaultFakeResults = map[string]json.RawMessage{
+	"sendMessage":            json.RawMessage(sentMessageResult),
+	"sendPhoto":              json.RawMessage(sentMessageResult),
+	"sendAudio":              json.RawMessage(sentMessageResult),
+	"sendDocument":           json.RawMessage(sentMessageResult),
+	"sendVideo":              json.RawMessage(sentMessageResult),
+	"sendAnimation":          json.RawMessage(sentMessageResult),
+	"sendVoice":              json.RawMessage(sentMessageResult),
+	"sendVideoNote":          json.RawMessage(sentMessageResult),
+	"sendSticker":            json.RawMessage(sentMessageResult),
+	"sendMediaGroup":         json.RawMessage(`[` + sentMessageResult + `]`),
 	"deleteMessage":          json.RawMessage(`true`),
 	"deleteEphemeralMessage": json.RawMessage(`true`),
 	"banChatMember":          json.RawMessage(`true`),
@@ -60,9 +78,19 @@ func (c *fakeBotClient) RequestWithContext(ctx context.Context, token string, me
 	for k, v := range params {
 		stored[k] = v
 	}
+	// The whole lookup below reads the recorded calls and the canned answers,
+	// which tests mutate from the test goroutine while handler goroutines are
+	// still calling the API.
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.Calls = append(c.Calls, fakeCall{Method: method, Params: stored})
-	c.mu.Unlock()
+
+	if c.Errors != nil {
+		if err, ok := c.Errors[method]; ok {
+			return nil, err
+		}
+	}
 
 	if c.Results != nil {
 		if res, ok := c.Results[method]; ok {
@@ -108,6 +136,47 @@ func (c *fakeBotClient) callsFor(method string) []fakeCall {
 	return out
 }
 
+// clearCalls drops the recorded calls. Handlers that keep calling the API from
+// a background goroutine after they return write the log under the same mutex,
+// so clearing the log has to go through it too.
+func (c *fakeBotClient) clearCalls() {
+	c.mu.Lock()
+	c.Calls = nil
+	c.mu.Unlock()
+}
+
+// setResult pins the canned answer of an API method, under the client mutex for
+// the same reason as clearCalls.
+func (c *fakeBotClient) setResult(method string, result json.RawMessage) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.Results == nil {
+		c.Results = make(map[string]json.RawMessage)
+	}
+	c.Results[method] = result
+}
+
+// setError makes one API method fail, under the client mutex for the same
+// reason as clearCalls.
+func (c *fakeBotClient) setError(method string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.Errors == nil {
+		c.Errors = make(map[string]error)
+	}
+	c.Errors[method] = err
+}
+
+// setMemberStatus pins the getChatMember answer for one user.
+func (c *fakeBotClient) setMemberStatus(userID int64, status string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.MemberStatus == nil {
+		c.MemberStatus = make(map[int64]string)
+	}
+	c.MemberStatus[userID] = status
+}
+
 // sentTexts returns the "text" param of every sendMessage call.
 func (c *fakeBotClient) sentTexts() []string {
 	var out []string
@@ -151,8 +220,11 @@ var memDBCounter int
 func setupTestEnv(t *testing.T) (*gotgbot.Bot, *fakeBotClient) {
 	t.Helper()
 
-	oldBot, oldDB, oldConfig := Bot, DB, Config
-	t.Cleanup(func() { Bot, DB, Config = oldBot, oldDB, oldConfig })
+	oldBot, oldDB, oldConfig, oldLogger := Bot, DB, Config, Logger
+	t.Cleanup(func() { Bot, DB, Config, Logger = oldBot, oldDB, oldConfig, oldLogger })
+
+	// main() builds the slog logger; handlers that log need it in tests too.
+	Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	client := &fakeBotClient{}
 	bot := &gotgbot.Bot{User: gotgbot.User{Id: 1, IsBot: true, Username: "testbot"}, Token: "TESTTOKEN", BotClient: client}
