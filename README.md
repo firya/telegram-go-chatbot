@@ -8,6 +8,8 @@ Telegram-бот для одного конкретного чата на Go. Р�
 - 85 исходников `.go`, 94 теста в 13 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
+- С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
+  `qwen3.8-flash-next-iq3_xxs` и др., подробности — в разделе [Разработка](#разработка))
 
 ## Команды
 
@@ -186,6 +188,28 @@ assets/              PNG стикеров, вшиты в бинарь через
   в systemd, `restart: always` в compose).
 - Ошибки хендлеров диспетчер отправляет в чат («Ошибка: …»), токен в тексте подменяется на `TOKEN`.
 - AI-команды (`/ai`, `/restartai`, `/setaisystem`) закомментированы в `main.go`.
+
+## Разработка
+
+С **16 октября 2026 года** разработкой занимается ИИ: правки пишет модель, человек ставит задачи,
+принимает решения и проверяет результат. Каждый такой коммит помечен в сообщении
+(`Made with the … model.`) и соавтором (`Co-authored-by: … <noreply@opencode.ai>`), поэтому вклад ИИ
+виден прямо в истории git.
+
+Модели локального стека Strata — конфигурации в `~/.strata/*.json`, движок `~/.strata/engine/strata`,
+веса в `~/Strata-data/models`:
+
+| Модель (`model_name`) | Что это | В этом репозитории |
+|---|---|---|
+| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, README |
+| `qwen3.8-flash-next-iq3_xxs` | Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | `e55e505` (go:embed), `30415bd` (тесты хелперов + фикс `RandInt`) |
+| `qwen3.8-flash-next` | она же, до отдельного кванта | `4ab27c5` — первый ИИ-коммит (`bot_api_url` для всех API-вызовов) |
+| `orcarouter-qwen3.8-flash-next-uncensored-iq3_xxs` | Qwen3.8-Flash-Next Uncensored, IQ3_XXS | настроена в `~/.strata`, к этому коду не применялась |
+
+Рядом с ними в стеке: vision-проекции `mmproj-Qwen3.8-Flash-Next-BF16.gguf` и
+`mmproj-Swift-Qwen3.8-Flash-Next-BF16.gguf`, черновик для спекулятивного декодирования
+`mtp-q2_0.gguf`, а в `~/.strata/data/gguf_fingerprints.json` описаны и другие кванты этих же моделей
+(Q2_0, IQ2_XS, IQ3_XXS, IQ3_S, coder IQ1_M, unsloth UD-IQ4_XS / UD-Q4_K_XL).
 
 ## Лицензия
 
