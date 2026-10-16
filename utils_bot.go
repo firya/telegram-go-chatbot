@@ -16,12 +16,19 @@ import (
 )
 
 func BotInit() error {
+	// In gotgbot rc.36 BotOpts.RequestOpts only applies to the initial GetMe.
+	// To make ALL API calls use the custom API URL, it must be set as the
+	// DefaultRequestOpts on the bot client.
+	reqOpts := &gotgbot.RequestOpts{
+		Timeout: time.Second * 30,
+		APIURL:  Config.BotApiUrl,
+	}
 	bot, err := gotgbot.NewBot(Config.Token, &gotgbot.BotOpts{
 		DisableTokenCheck: false,
-		RequestOpts: &gotgbot.RequestOpts{
-			Timeout: time.Second * 30,
-			APIURL:  Config.BotApiUrl,
+		BotClient: &gotgbot.BaseBotClient{
+			DefaultRequestOpts: reqOpts,
 		},
+		RequestOpts: reqOpts,
 	})
 	if err != nil {
 		return err
