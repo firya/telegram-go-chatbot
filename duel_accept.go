@@ -149,7 +149,7 @@ func Accept(bot *gotgbot.Bot, context *ext.Context) error {
 		if err != nil {
 			return err
 		}
-		_, _, err = Bot.EditMessageText(&gotgbot.EditMessageTextOpts{Text: prt.Sprintf("%v😈 Наводит револьвер на %v и стреляет.\nЯ хз как это объяснить, но %v победитель!\n%v отправился на респавн на %d мин.", prefix, MentionUser(player), MentionUser(victim), MentionUser(player), duelist.Deaths), ParseMode: gotgbot.ParseModeHTML, ChatId: context.EffectiveChat.Id, MessageId: message.MessageId, ReplyMarkup: gotgbot.InlineKeyboardMarkup{}})
+		_, _, err = Bot.EditMessageText(&gotgbot.EditMessageTextOpts{Text: prt.Sprintf("%v😈 Наводит револьвер на %v и стреляет.\nЯ хз как это объяснить, но %v победитель!\n%v отправился на респавн на %d %v.", prefix, MentionUser(player), MentionUser(victim), MentionUser(player), duelist.Deaths, ruPlural(duelist.Deaths, "минуту", "минуты", "минут")), ParseMode: gotgbot.ParseModeHTML, ChatId: context.EffectiveChat.Id, MessageId: message.MessageId, ReplyMarkup: gotgbot.InlineKeyboardMarkup{}})
 		if err != nil {
 			return err
 		}
@@ -199,7 +199,7 @@ func Accept(bot *gotgbot.Bot, context *ext.Context) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = Bot.EditMessageText(&gotgbot.EditMessageTextOpts{Text: prt.Sprintf("%v\nПобедитель дуэли: %v.\n%v отправился на респавн на %d мин.", prefix, MentionUser(player), MentionUser(victim), VictimDuelist.Deaths), ParseMode: gotgbot.ParseModeHTML, ChatId: context.EffectiveChat.Id, MessageId: message.MessageId, ReplyMarkup: gotgbot.InlineKeyboardMarkup{}})
+	_, _, err = Bot.EditMessageText(&gotgbot.EditMessageTextOpts{Text: prt.Sprintf("%v\nПобедитель дуэли: %v.\n%v отправился на респавн на %d %v.", prefix, MentionUser(player), MentionUser(victim), VictimDuelist.Deaths, ruPlural(VictimDuelist.Deaths, "минуту", "минуты", "минут")), ParseMode: gotgbot.ParseModeHTML, ChatId: context.EffectiveChat.Id, MessageId: message.MessageId, ReplyMarkup: gotgbot.InlineKeyboardMarkup{}})
 	if err != nil {
 		return err
 	}

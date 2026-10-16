@@ -12,6 +12,11 @@ package main
 //	ruPlural(2, "победа", "победы", "побед") // "победы"
 //	ruPlural(5, "победа", "победы", "побед") // "побед"
 //	ruPlural(11, "победа", "победы", "побед") // "побед"
+//
+// The "one" form is the form for 1 in the surrounding phrase, so pass the case
+// that phrase needs: numerals after a preposition take the accusative
+// ("на 1 минуту", "через 1 минуту", "помолчать 1 минуту"), which is why the
+// duration sites pass "минуту" and not "минута".
 func ruPlural[T int | int64](count T, one, few, many string) string {
 	n := int64(count)
 	if n < 0 {

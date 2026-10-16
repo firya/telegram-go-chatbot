@@ -107,9 +107,9 @@ func Blessing(bot *gotgbot.Bot, context *ext.Context) error {
 	lastSuicide = time.Now().Unix()
 	if burst > 3 && time.Now().Unix() > lastVideoSent+3600 {
 		lastVideoSent = time.Now().Unix()
-		_, err = bot.SendVideo(context.Message.Chat.Id, gotgbot.InputFileByID("BAACAgIAAx0CReJGYgABAlMuYnagTilFaB8ke8Rw-dYLbfJ6iF8AAicYAAIlxrlLY9ah2fUtR40kBA"), &gotgbot.SendVideoOpts{ParseMode: gotgbot.ParseModeHTML, Caption: prt.Sprintf("<code>%v💥 %v %v%v.\nРеспавн через %d мин.</code>", ricochetText, UserFullName(&victim), prependText, GetBless(), duration)})
+		_, err = bot.SendVideo(context.Message.Chat.Id, gotgbot.InputFileByID("BAACAgIAAx0CReJGYgABAlMuYnagTilFaB8ke8Rw-dYLbfJ6iF8AAicYAAIlxrlLY9ah2fUtR40kBA"), &gotgbot.SendVideoOpts{ParseMode: gotgbot.ParseModeHTML, Caption: prt.Sprintf("<code>%v💥 %v %v%v.\nРеспавн через %d %v.</code>", ricochetText, UserFullName(&victim), prependText, GetBless(), duration, ruPlural(duration, "минуту", "минуты", "минут"))})
 	} else {
-		_, err = context.EffectiveChat.SendMessage(bot, prt.Sprintf("<code>%v💥 %v %v%v.\nРеспавн через %d мин.</code>", ricochetText, UserFullName(&victim), prependText, GetBless(), duration), &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
+		_, err = context.EffectiveChat.SendMessage(bot, prt.Sprintf("<code>%v💥 %v %v%v.\nРеспавн через %d %v.</code>", ricochetText, UserFullName(&victim), prependText, GetBless(), duration, ruPlural(duration, "минуту", "минуты", "минут")), &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
 	}
 	return err
 }

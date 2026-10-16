@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -236,5 +238,31 @@ func testInlineContext(bot *gotgbot.Bot, from *gotgbot.User, query string) *ext.
 func seedUser(id int64, username, firstName string) {
 	if err := DB.Create(&gotgbot.User{Id: id, Username: username, FirstName: firstName}).Error; err != nil {
 		panic("seedUser: " + err.Error())
+	}
+}
+
+// minutesRE matches a count written out with the declined minute noun,
+// e.g. "12 минут", "1 минуту".
+var minutesRE = regexp.MustCompile(`(\d+) (минуту|минуты|минут)`)
+
+// assertMinutesDeclined checks that every "N минут" in text spells the noun out
+// in the form ruPlural picks for N, i.e. not the "мин." abbreviation and not a
+// fixed form. Texts with a respawn/mute duration must contain such a phrase.
+func assertMinutesDeclined(t *testing.T, text string) {
+	t.Helper()
+	hits := minutesRE.FindAllStringSubmatch(text, -1)
+	if len(hits) == 0 {
+		t.Errorf("нет склоняемого «минута» с числом в тексте %q", text)
+		return
+	}
+	for _, m := range hits {
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			t.Errorf("нечитаемое число в %q: %v", m[0], err)
+			continue
+		}
+		if want := ruPlural(n, "минуту", "минуты", "минут"); m[2] != want {
+			t.Errorf("«%s %s», want «%s %s»; текст: %q", m[1], m[2], m[1], want, text)
+		}
 	}
 }

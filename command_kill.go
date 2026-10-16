@@ -102,15 +102,15 @@ func Kill(bot *gotgbot.Bot, context *ext.Context) error {
 	if err != nil {
 		return err
 	}
-	text := prt.Sprintf("💥 %v %vпристрелил %v.\n%v отправился на респавн на %d мин.", UserFullName(context.Message.From), prependText, UserFullName(&target), UserFullName(&target), duration)
+	text := prt.Sprintf("💥 %v %vпристрелил %v.\n%v отправился на респавн на %d %v.", UserFullName(context.Message.From), prependText, UserFullName(&target), UserFullName(&target), duration, ruPlural(duration, "минуту", "минуты", "минут"))
 	if command == "/bless" {
-		text = prt.Sprintf("🤫 %v %vпопросил %v помолчать %d %v.", UserFullName(context.Message.From), prependText, UserFullName(&target), duration, ruPlural(duration, "минута", "минуты", "минут"))
+		text = prt.Sprintf("🤫 %v %vпопросил %v помолчать %d %v.", UserFullName(context.Message.From), prependText, UserFullName(&target), duration, ruPlural(duration, "минуту", "минуты", "минут"))
 	}
 	if strings.Contains(command, "bite") || strings.Contains(command, "mlem") {
-		text = prt.Sprintf("😼 %v %vсделал кусь %v.\n%v отправился на респавн на %d мин.", UserFullName(context.Message.From), prependText, UserFullName(&target), UserFullName(&target), duration)
+		text = prt.Sprintf("😼 %v %vсделал кусь %v.\n%v отправился на респавн на %d %v.", UserFullName(context.Message.From), prependText, UserFullName(&target), UserFullName(&target), duration, ruPlural(duration, "минуту", "минуты", "минут"))
 	}
 	if victimText != "" {
-		text = prt.Sprintf("💥 %v\n%v отправился на респавн на %d мин.", victimText, UserFullName(&target), duration)
+		text = prt.Sprintf("💥 %v\n%v отправился на респавн на %d %v.", victimText, UserFullName(&target), duration, ruPlural(duration, "минуту", "минуты", "минут"))
 	}
 	_, err = context.EffectiveChat.SendMessage(bot, text, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
 	return err

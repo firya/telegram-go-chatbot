@@ -52,6 +52,9 @@ func TestBlessing(t *testing.T) {
 	if len(texts) != 1 || !strings.Contains(texts[0], "💥") || !strings.Contains(texts[0], "Респавн через") {
 		t.Errorf("Blessing sent %q, want suicide message", texts)
 	}
+	if len(texts) == 1 {
+		assertMinutesDeclined(t, texts[0])
+	}
 	if deaths := duelistDeaths(t, 42); deaths != 1 {
 		t.Errorf("Blessing: duelist deaths = %d, want 1", deaths)
 	}
@@ -159,6 +162,9 @@ func TestKill(t *testing.T) {
 	if len(texts) != 1 || !strings.Contains(texts[0], "пристрелил") {
 		t.Errorf("Kill (reply) sent %q, want kill message", texts)
 	}
+	if len(texts) == 1 {
+		assertMinutesDeclined(t, texts[0])
+	}
 	if deaths := duelistDeaths(t, 777); deaths != 1 {
 		t.Errorf("Kill (reply): victim deaths = %d, want 1", deaths)
 	}
@@ -184,6 +190,9 @@ func TestKill(t *testing.T) {
 	if len(texts) != 1 || !strings.Contains(texts[0], "попросил") || !strings.Contains(texts[0], "помолчать") {
 		t.Errorf("Kill (/bless) sent %q, want shush message", texts)
 	}
+	if len(texts) == 1 {
+		assertMinutesDeclined(t, texts[0])
+	}
 
 	// Admin targets make the bullet ricochet onto a regular member.
 	client.Calls = nil
@@ -201,6 +210,9 @@ func TestKill(t *testing.T) {
 	texts = client.sentTexts()
 	if len(texts) != 1 || !strings.Contains(texts[0], "Пуля отскакивает") {
 		t.Errorf("Kill (ricochet) sent %q, want ricochet message", texts)
+	}
+	if len(texts) == 1 {
+		assertMinutesDeclined(t, texts[0])
 	}
 
 	// kilo variants multiply the duration massively.

@@ -539,6 +539,7 @@ func TestDuelAcceptFull(t *testing.T) {
 	if !strings.Contains(final, "Победитель дуэли") || !strings.Contains(final, "отправился на респавн") {
 		t.Errorf("Accept final edit = %q, want winner + respawn text", final)
 	}
+	assertMinutesDeclined(t, final)
 	restricts := client.callsFor("restrictChatMember")
 	if len(restricts) != 1 {
 		t.Fatalf("Accept: restrictChatMember calls = %d, want 1", len(restricts))

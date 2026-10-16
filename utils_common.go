@@ -284,7 +284,7 @@ func CheckUserBan(bot *gotgbot.Bot, context *ext.Context) error {
 	}
 	if !mcm.CanSendMessages && mcm.Status == "restricted" {
 		duration := (mcm.UntilDate - time.Now().Local().Unix()) / 60
-		return Reply(fmt.Sprintf("%v не сможет ответить, т.к. умир.\nРеспавн через %d мин.", MentionUser(&user), duration), *context)
+		return Reply(fmt.Sprintf("%v не сможет ответить, т.к. умир.\nРеспавн через %d %v.", MentionUser(&user), duration, ruPlural(duration, "минуту", "минуты", "минут")), *context)
 	}
 	return nil
 }
