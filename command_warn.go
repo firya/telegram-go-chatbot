@@ -41,11 +41,11 @@ func WarnUser(bot *gotgbot.Bot, context *ext.Context) error {
 		return result.Error
 	}
 	if warn.Amount == 1 {
-		context.EffectiveChat.SendMessage(bot, fmt.Sprintf("%v, у тебя 1 предупреждение.\nЕсль получишь 3 предупреждения за 2 недели, то будешь замьючен.", UserFullName(&target)), &gotgbot.SendMessageOpts{ReceiverUserId: target.Id, ParseMode: gotgbot.ParseModeHTML})
+		context.EffectiveChat.SendMessage(bot, fmt.Sprintf("%v, у тебя 1 предупреждение.\nЕсли получишь 3 предупреждения за 2 недели, то будешь замьючен.", UserFullName(&target)), &gotgbot.SendMessageOpts{ReceiverUserId: target.Id, ParseMode: gotgbot.ParseModeHTML})
 		return Reply(fmt.Sprintf("%v получил предупреждение. Сейчас у него 1 из 3.", UserFullName(&target)), *context)
 	}
 	if warn.Amount == 2 {
-		context.EffectiveChat.SendMessage(bot, (fmt.Sprintf("%v, у тебя 2 предупреждения.\nЕсли в течении недели получишь ещё одно, то будешь замьючен.", UserFullName(&target))), &gotgbot.SendMessageOpts{ReceiverUserId: target.Id, ParseMode: gotgbot.ParseModeHTML})
+		context.EffectiveChat.SendMessage(bot, (fmt.Sprintf("%v, у тебя 2 предупреждения.\nЕсли в течение недели получишь ещё одно, то будешь замьючен.", UserFullName(&target))), &gotgbot.SendMessageOpts{ReceiverUserId: target.Id, ParseMode: gotgbot.ParseModeHTML})
 		return Reply(fmt.Sprintf("%v получил предупреждение. Сейчас у него 2 из 3.", UserFullName(&target)), *context)
 	}
 	if warn.Amount == 3 {

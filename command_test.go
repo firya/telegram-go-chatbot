@@ -317,6 +317,10 @@ func TestWarnUser(t *testing.T) {
 	if len(texts) != 2 || !strings.Contains(texts[0], "у тебя 1 предупреждение") || !strings.Contains(texts[1], "1 из 3") {
 		t.Errorf("WarnUser (1st) sent %q, want warning to user + report to moderator", texts)
 	}
+	// The private message spells out what happens next: "Если", not "Есль".
+	if len(texts) != 2 || !strings.Contains(texts[0], "Если получишь 3 предупреждения за 2 недели") {
+		t.Errorf("WarnUser (1st) warning text = %q, want the 3-warnings notice", texts)
+	}
 
 	// Second warning.
 	client.Calls = nil
@@ -325,6 +329,12 @@ func TestWarnUser(t *testing.T) {
 	}
 	if err := DB.First(&warn, targetUser.Id).Error; err != nil || warn.Amount != 2 {
 		t.Errorf("WarnUser (2nd): Amount = %d (err %v), want 2", warn.Amount, err)
+	}
+	// "в течение недели" - the preposition takes the genitive.
+	texts = client.sentTexts()
+	if len(texts) != 2 || !strings.Contains(texts[0], "у тебя 2 предупреждения") ||
+		!strings.Contains(texts[0], "Если в течение недели") || !strings.Contains(texts[1], "2 из 3") {
+		t.Errorf("WarnUser (2nd) sent %q, want warning to user + report to moderator", texts)
 	}
 
 	// Third warning -> mute via RestrictChatMember.
@@ -340,9 +350,31 @@ func TestWarnUser(t *testing.T) {
 		t.Errorf("WarnUser (3rd): restricted %v/%v, want chat -100 user 777",
 			restricts[0].Params["chat_id"], restricts[0].Params["user_id"])
 	}
+	// The mute lasts a week.
+	assertUntilDate(t, restricts[0].Params, time.Now().Add(168*time.Hour))
 	texts = client.sentTexts()
+	if len(texts) < 2 || !strings.Contains(texts[0], "ты набрал 3 предупреждения") {
+		t.Errorf("WarnUser (3rd) sent %q, want the 3-warnings notice to the user", texts)
+	}
 	if len(texts) == 0 || !strings.Contains(texts[len(texts)-1], "замьючен") {
 		t.Errorf("WarnUser (3rd) sent %q, want mute report", texts)
+	}
+
+	// Warnings decay by one per full week since the last one, and /warn applies
+	// the decay before counting: a 15 days old counter of 2 is a single warning.
+	if err := DB.Save(&Warn{UserID: targetUser.Id, Amount: 2, LastWarn: time.Now().Add(-15 * 24 * time.Hour)}).Error; err != nil {
+		t.Fatalf("WarnUser (decay): seed: %v", err)
+	}
+	client.Calls = nil
+	if err := WarnUser(bot, testReplyContext(bot, "/warn", testUser(100), replyTo)); err != nil {
+		t.Fatalf("WarnUser (decay): %v", err)
+	}
+	if err := DB.First(&warn, targetUser.Id).Error; err != nil || warn.Amount != 1 {
+		t.Errorf("WarnUser (decay): Amount = %d (err %v), want 1", warn.Amount, err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 2 || !strings.Contains(texts[0], "у тебя 1 предупреждение") || !strings.Contains(texts[1], "1 из 3") {
+		t.Errorf("WarnUser (decay) sent %q, want the counter back at 1", texts)
 	}
 }
 
@@ -368,6 +400,20 @@ func TestMywarns(t *testing.T) {
 	texts = client.sentTexts()
 	if len(texts) != 1 || texts[0] != "У тебя 2 предупреждения." {
 		t.Errorf("Mywarns sent %q, want %q", texts, "У тебя 2 предупреждения.")
+	}
+
+	// Warnings decay by one per full week since the last one: 3 warnings from
+	// 8 days ago are reported as 2.
+	client.Calls = nil
+	if err := DB.Save(&Warn{UserID: 42, Amount: 3, LastWarn: time.Now().Add(-8 * 24 * time.Hour)}).Error; err != nil {
+		t.Fatalf("Mywarns (decay): seed: %v", err)
+	}
+	if err := Mywarns(bot, testContext(bot, "/mywarns", testUser(42))); err != nil {
+		t.Fatalf("Mywarns (decay): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 || texts[0] != "У тебя 2 предупреждения." {
+		t.Errorf("Mywarns (decay) sent %q, want the decayed amount 2", texts)
 	}
 }
 
