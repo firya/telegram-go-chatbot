@@ -5,8 +5,8 @@ import (
 )
 
 // TestDataBaseInit covers the failure paths of the database start. Production
-// runs on PostgreSQL, and the bot has to report a bad config.json, not crash:
-// a DSN pgx cannot parse, and a DSN whose server is not there.
+// runs on PostgreSQL, and the bot has to report a bad DSN, not crash: a DSN
+// pgx cannot parse, and a DSN whose server is not there.
 func TestDataBaseInit(t *testing.T) {
 	// pgx rejects the DSN itself.
 	if _, err := DataBaseInit("postgres://user:pass@127.0.0.1:1/db?sslmode=bogus"); err == nil {

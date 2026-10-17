@@ -3,10 +3,8 @@ package main
 // The bot is configured by the environment. Real environment variables win over
 // the .env file, and the .env file is the way Docker and systemd configure it:
 // `docker run --env-file .env`, compose `env_file: .env`, systemd `EnvironmentFile=`.
-// There is no config.json anymore; importConfigJSON below converts an old one.
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -36,37 +34,36 @@ const DefaultEnvFile = ".env"
 // Configuration is the whole bot configuration. Every field is a ZAVTRA_*
 // environment variable of the same name in upper snake case: Token is
 // ZAVTRA_TOKEN, BotApiDataDir is ZAVTRA_BOT_API_DATADIR, and so on.
-// The json tags are only used by importConfigJSON to read a legacy config.json.
 type Configuration struct {
-	Token             string   `json:"token"`
-	DSN               string   `json:"dsn"`
-	AppID             int      `json:"app_id"`
-	AppHash           string   `json:"app_hash"`
-	BotApiUrl         string   `json:"bot_api_url"`
-	BotApiDataDir     string   `json:"bot_api_datadir"`
-	AllowedUpdates    []string `json:"allowed_updates"`
-	Listen            string   `json:"listen"`
-	EndpointPublicURL string   `json:"endpoint_public_url"`
-	MaxConnections    int64    `json:"max_connections"`
-	Chat              int64    `json:"chat"`
-	ReserveChat       int64    `json:"reserve_chat"`
-	CommentChat       int64    `json:"comment_chat"`
-	StreamChannel     int64    `json:"stream_channel"`
-	Channel           int64    `json:"channel"`
-	Admins            []int64  `json:"admins"`
-	Moders            []int64  `json:"moders"`
-	SysAdmin          int64    `json:"sysadmin"`
-	CurrencyKey       string   `json:"currency_key"`
-	ReleasesUrl       string   `json:"releases_url"`
-	FontPath          string   `json:"fontpath"`
-	Proxy             string   `json:"proxy"`
-	AIURL             string   `json:"ai_url"`
-	AIToken           string   `json:"ai_token"`
-	AIModel           string   `json:"ai_model"`
-	AISystem          string   `json:"ai_system"`
-	AIAdminOnlyTools  []string `json:"ai_admin_only_tools"`
-	AntiSpamWindow    int      `json:"antispam_window"`
-	AntiSpamCount     int      `json:"antispam_count"`
+	Token             string
+	DSN               string
+	AppID             int
+	AppHash           string
+	BotApiUrl         string
+	BotApiDataDir     string
+	AllowedUpdates    []string
+	Listen            string
+	EndpointPublicURL string
+	MaxConnections    int64
+	Chat              int64
+	ReserveChat       int64
+	CommentChat       int64
+	StreamChannel     int64
+	Channel           int64
+	Admins            []int64
+	Moders            []int64
+	SysAdmin          int64
+	CurrencyKey       string
+	ReleasesUrl       string
+	FontPath          string
+	Proxy             string
+	AIURL             string
+	AIToken           string
+	AIModel           string
+	AISystem          string
+	AIAdminOnlyTools  []string
+	AntiSpamWindow    int
+	AntiSpamCount     int
 }
 
 // ConfigInit builds the configuration from the environment: it loads the .env
@@ -266,87 +263,4 @@ func splitList(value string) []string {
 	return strings.FieldsFunc(value, func(r rune) bool {
 		return r == ',' || r == ';' || r == ' ' || r == '\t'
 	})
-}
-
-// importConfigJSON converts a legacy config.json into the text of a .env file and
-// returns it. It is the migration path for a server that has a config.json:
-// `ZAVTRA_IMPORT_CONFIG_JSON=config.json ./zavtrachat_bot > .env`, then chmod 600.
-// Nothing else reads config.json.
-func importConfigJSON(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	var legacy Configuration
-	if err := json.NewDecoder(file).Decode(&legacy); err != nil {
-		return "", fmt.Errorf("read %s: %w", path, err)
-	}
-
-	var out strings.Builder
-	add := func(name string, value string) {
-		if value == "" {
-			return
-		}
-		fmt.Fprintf(&out, "%s=%s\n", name, quoteEnvValue(value))
-	}
-	addInt := func(name string, value int) {
-		if value != 0 {
-			add(name, strconv.Itoa(value))
-		}
-	}
-	addInt64 := func(name string, value int64) {
-		if value != 0 {
-			add(name, strconv.FormatInt(value, 10))
-		}
-	}
-
-	add("ZAVTRA_TOKEN", legacy.Token)
-	add("ZAVTRA_DSN", legacy.DSN)
-	addInt("ZAVTRA_APP_ID", legacy.AppID)
-	add("ZAVTRA_APP_HASH", legacy.AppHash)
-	add("ZAVTRA_BOT_API_URL", legacy.BotApiUrl)
-	add("ZAVTRA_BOT_API_DATADIR", legacy.BotApiDataDir)
-	add("ZAVTRA_ALLOWED_UPDATES", strings.Join(legacy.AllowedUpdates, ","))
-	add("ZAVTRA_LISTEN", legacy.Listen)
-	add("ZAVTRA_ENDPOINT_PUBLIC_URL", legacy.EndpointPublicURL)
-	addInt64("ZAVTRA_MAX_CONNECTIONS", legacy.MaxConnections)
-	addInt64("ZAVTRA_CHAT", legacy.Chat)
-	addInt64("ZAVTRA_RESERVE_CHAT", legacy.ReserveChat)
-	addInt64("ZAVTRA_COMMENT_CHAT", legacy.CommentChat)
-	addInt64("ZAVTRA_STREAM_CHANNEL", legacy.StreamChannel)
-	addInt64("ZAVTRA_CHANNEL", legacy.Channel)
-	add("ZAVTRA_ADMINS", joinInt64s(legacy.Admins))
-	add("ZAVTRA_MODERS", joinInt64s(legacy.Moders))
-	addInt64("ZAVTRA_SYSADMIN", legacy.SysAdmin)
-	add("ZAVTRA_CURRENCY_KEY", legacy.CurrencyKey)
-	add("ZAVTRA_RELEASES_URL", legacy.ReleasesUrl)
-	add("ZAVTRA_FONTPATH", legacy.FontPath)
-	add("ZAVTRA_PROXY", legacy.Proxy)
-	add("ZAVTRA_AI_URL", legacy.AIURL)
-	add("ZAVTRA_AI_TOKEN", legacy.AIToken)
-	add("ZAVTRA_AI_MODEL", legacy.AIModel)
-	add("ZAVTRA_AI_SYSTEM", legacy.AISystem)
-	add("ZAVTRA_AI_ADMIN_ONLY_TOOLS", strings.Join(legacy.AIAdminOnlyTools, ","))
-	addInt("ZAVTRA_ANTISPAM_WINDOW", legacy.AntiSpamWindow)
-	addInt("ZAVTRA_ANTISPAM_COUNT", legacy.AntiSpamCount)
-
-	return out.String(), nil
-}
-
-func joinInt64s(values []int64) string {
-	parts := make([]string, 0, len(values))
-	for _, value := range values {
-		parts = append(parts, strconv.FormatInt(value, 10))
-	}
-	return strings.Join(parts, ",")
-}
-
-// quoteEnvValue quotes a value for a .env file. Double quotes are what godotenv
-// unescapes, so a token with a $ in it, a system prompt with newlines and a DSN
-// with a # in the password all survive the round trip.
-func quoteEnvValue(value string) string {
-	escaped := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`).Replace(value)
-	return `"` + escaped + `"`
 }

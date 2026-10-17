@@ -33,9 +33,8 @@ func writeTestEnv(t *testing.T, contents string) {
 
 // TestConfigInit covers the environment based configuration: the defaults, the
 // mandatory token and chat, the .env file, the environment winning over it,
-// lists, numbers, the proxy, and the .env equivalent of a legacy config.json.
-// Every case runs in its own directory, so the .env of the checkout is never
-// touched.
+// lists, numbers and the proxy. Every case runs in its own directory, so the
+// .env of the checkout is never touched.
 func TestConfigInit(t *testing.T) {
 	oldConfig, oldProxy := Config, HTTPClientProxy
 	t.Cleanup(func() { Config, HTTPClientProxy = oldConfig, oldProxy })
@@ -278,101 +277,6 @@ export ZAVTRA_CURRENCY_KEY=cmc-key
 		}
 		if HTTPClientProxy != nil {
 			t.Errorf("HTTPClientProxy is set (broken proxy), want nil")
-		}
-	})
-}
-
-// TestImportConfigJSON covers the migration of a legacy config.json: the values
-// of the file become ZAVTRA_* variables, empty ones are left out, awkward values
-// survive the round trip, and a file that is not a config.json is an error.
-func TestImportConfigJSON(t *testing.T) {
-	t.Run("round trip", func(t *testing.T) {
-		t.Chdir(t.TempDir())
-		clearZavtraEnv(t)
-		Config, HTTPClientProxy = &Configuration{}, nil
-
-		legacy := `{"token":"123:abc$dollar","dsn":"postgres://u:p#1@localhost/db","chat":-100,` +
-			`"reserve_chat":-200,"sysadmin":7,"admins":[1,2],"moders":[3],"app_id":42,` +
-			`"app_hash":"deadbeef","antispam_window":15,"antispam_count":4,` +
-			`"allowed_updates":["message","chat_member"],"ai_admin_only_tools":["search","calc"],` +
-			`"ai_system":"first line\nsecond line","max_connections":40,"currency_key":"cmc-key"}`
-		if err := os.WriteFile("config.json", []byte(legacy), 0o600); err != nil {
-			t.Fatalf("write config.json: %v", err)
-		}
-
-		text, err := importConfigJSON("config.json")
-		if err != nil {
-			t.Fatalf("importConfigJSON: %v", err)
-		}
-		if err := os.WriteFile(".env", []byte(text), 0o600); err != nil {
-			t.Fatalf("write .env: %v", err)
-		}
-
-		if err := ConfigInit(); err != nil {
-			t.Fatalf("ConfigInit: %v\n.env was:\n%s", err, text)
-		}
-		if Config.Token != "123:abc$dollar" {
-			t.Errorf("Token = %q, want the token with its $", Config.Token)
-		}
-		if Config.DSN != "postgres://u:p#1@localhost/db" {
-			t.Errorf("DSN = %q, want the DSN with its #", Config.DSN)
-		}
-		if Config.AISystem != "first line\nsecond line" {
-			t.Errorf("AISystem = %q, want the prompt with its newline", Config.AISystem)
-		}
-		if Config.Chat != -100 || Config.ReserveChat != -200 || Config.SysAdmin != 7 {
-			t.Errorf("chats = %v/%v, sysadmin = %v, want the values of config.json",
-				Config.Chat, Config.ReserveChat, Config.SysAdmin)
-		}
-		if Config.AppID != 42 || Config.AppHash != "deadbeef" || Config.MaxConnections != 40 {
-			t.Errorf("app_id/app_hash/max_connections = %v/%q/%v, want 42/deadbeef/40",
-				Config.AppID, Config.AppHash, Config.MaxConnections)
-		}
-		if len(Config.Admins) != 2 || len(Config.Moders) != 1 {
-			t.Errorf("Admins/Moders = %v/%v, want the lists of config.json", Config.Admins, Config.Moders)
-		}
-		if len(Config.AllowedUpdates) != 2 || Config.AllowedUpdates[1] != "chat_member" {
-			t.Errorf("AllowedUpdates = %v, want the update types of config.json", Config.AllowedUpdates)
-		}
-		if len(Config.AIAdminOnlyTools) != 2 {
-			t.Errorf("AIAdminOnlyTools = %v, want the tools of config.json", Config.AIAdminOnlyTools)
-		}
-		if Config.AntiSpamWindow != 15 || Config.AntiSpamCount != 4 {
-			t.Errorf("antispam = %v/%v, want 15/4", Config.AntiSpamWindow, Config.AntiSpamCount)
-		}
-	})
-
-	t.Run("empty fields are left out", func(t *testing.T) {
-		t.Chdir(t.TempDir())
-		if err := os.WriteFile("config.json", []byte(`{"token":"123:abc","chat":-100}`), 0o600); err != nil {
-			t.Fatalf("write config.json: %v", err)
-		}
-
-		text, err := importConfigJSON("config.json")
-		if err != nil {
-			t.Fatalf("importConfigJSON: %v", err)
-		}
-		lines := strings.Split(strings.TrimSpace(text), "\n")
-		if len(lines) != 2 {
-			t.Errorf("importConfigJSON wrote %d lines (%q), want only token and chat", len(lines), text)
-		}
-		for _, line := range lines {
-			if !strings.HasPrefix(line, "ZAVTRA_TOKEN=") && !strings.HasPrefix(line, "ZAVTRA_CHAT=") {
-				t.Errorf("importConfigJSON wrote %q, want only ZAVTRA_TOKEN and ZAVTRA_CHAT", line)
-			}
-		}
-	})
-
-	t.Run("broken config.json", func(t *testing.T) {
-		t.Chdir(t.TempDir())
-		if err := os.WriteFile("config.json", []byte(`{"token":`), 0o600); err != nil {
-			t.Fatalf("write config.json: %v", err)
-		}
-		if _, err := importConfigJSON("config.json"); err == nil {
-			t.Errorf("importConfigJSON: err = nil, want the JSON decode error")
-		}
-		if _, err := importConfigJSON("missing.json"); err == nil {
-			t.Errorf("importConfigJSON (missing file): err = nil, want the open error")
 		}
 	})
 }

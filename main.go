@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -135,17 +134,6 @@ func main() {
 	Logger = slog.Default()
 	slog.SetDefault(Logger)
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	// One-time migration for a server that still has a config.json: print the
-	// .env equivalent of the file and exit, without starting the bot.
-	if path := os.Getenv("ZAVTRA_IMPORT_CONFIG_JSON"); path != "" {
-		text, err := importConfigJSON(path)
-		if err != nil {
-			slog.Error(fmt.Sprintf("config.json import failed: %s", err))
-			os.Exit(1)
-		}
-		fmt.Print(text)
-		return
-	}
 	slog.Info("init: config")
 	err := ConfigInit()
 	if err != nil {

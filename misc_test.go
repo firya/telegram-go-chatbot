@@ -276,7 +276,7 @@ func TestTldr(t *testing.T) {
 }
 
 // TestAdvice covers /advice against a stubbed advice API. The URL is hardcoded, so
-// the request is intercepted with the proxy setting from config.json.
+// the request is intercepted with the proxy setting from the environment.
 func TestAdvice(t *testing.T) {
 	bot, client := setupTestEnv(t)
 
@@ -343,7 +343,7 @@ func TestAnekdot(t *testing.T) {
 func TestCur(t *testing.T) {
 	bot, client := setupTestEnv(t)
 
-	// No currency_key in config.json.
+	// No ZAVTRA_CURRENCY_KEY in the environment.
 	if err := Cur(bot, testContext(bot, "/cur 1 USD RUB", testUser(42))); err != nil {
 		t.Fatalf("Cur (no key): %v", err)
 	}

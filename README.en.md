@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 93 `.go` source files, 152 tests in 23 files
+- 93 `.go` source files, 151 tests in 23 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -116,16 +116,7 @@ never reaches the image (`.dockerignore`).
 Lists are comma separated (spaces and `;` separate as well). Values with spaces, `$`, `#` or newlines go
 in double quotes: `ZAVTRA_AI_SYSTEM="first line\nsecond line"`.
 
-### Moving off config.json
-
-The bot does not read `config.json` anymore. An old file converts in one command — it prints the `.env`
-to stdout, writes nothing and does not start the bot:
-
-```bash
-ZAVTRA_IMPORT_CONFIG_JSON=config.json ./zavtrachat_bot > .env && chmod 600 .env
-```
-
-`600` is not optional: the file holds the bot token and the database password.
+The `.env` file is `600`: it holds the bot token and the database password.
 
 ## Running
 
@@ -155,8 +146,7 @@ CI (`.github/workflows/`):
 
   **The server needs a `.env` in the working directory of the service (`/home/telegram/bot/.env`)** —
   the configuration is read from the environment only, so without the file the service will not start.
-  Convert the old `config.json` with the command from “Moving off config.json”, `0600`, owned by the
-  service user;
+  `0600`, owned by the service user;
 - `docker-publish_yml` — builds the image and publishes it to `ghcr.io` with a cosign signature.
   **The file is named `_yml` instead of `.yml`, so GitHub Actions never picks it up** (workflows are
   looked for as `*.yml`/`*.yaml`).
@@ -164,7 +154,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 152 tests, ~25–45 s
+go test -race -count=1 ./...                                   # 151 tests, ~25–45 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 

@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 93 исходника `.go`, 152 теста в 23 файлах
+- 93 исходника `.go`, 151 тест в 23 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -116,16 +116,7 @@ Docker: `docker run --env-file .env`, в compose `env_file: .env`, в systemd `E
 Списки — через запятую (пробел и `;` тоже разделители). Значения с пробелами, `$`, `#` и переводами
 строк берутся в двойные кавычки: `ZAVTRA_AI_SYSTEM="первая строка\nвторая"`.
 
-### Переход с config.json
-
-`config.json` ботом не читается. Старый файл конвертируется одной командой — она печатает `.env` в
-stdout, ничего не записывает и бота не запускает:
-
-```bash
-ZAVTRA_IMPORT_CONFIG_JSON=config.json ./zavtrachat_bot > .env && chmod 600 .env
-```
-
-Права `600` обязательны: в файле токен бота и пароль базы.
+Права `.env` — `600`: в файле токен бота и пароль базы.
 
 ## Запуск
 
@@ -154,16 +145,15 @@ CI (`.github/workflows/`):
   идут, прод не перезапускается; параллельные деплои блокируются `concurrency`-группой;
 
   **На сервере в рабочей директории сервиса должен лежать `.env` (`/home/telegram/bot/.env`)** —
-  конфигурация читается только из окружения, без файла сервис не стартует. Старый `config.json`
-  конвертируется командой из раздела «Переход с config.json», права `0600`, владелец — пользователь
-  сервиса;
+  конфигурация читается только из окружения, без файла сервис не стартует. Права `0600`, владелец —
+  пользователь сервиса;
 - `docker-publish_yml` — сборка и публикация образа в `ghcr.io` + cosign-подпись. **Файл назван с
   `_yml` вместо `.yml`, поэтому GitHub Actions его не подхватывает** (workflows ищут `*.yml`/`*.yaml`).
 
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 152 теста, ~25–45 с
+go test -race -count=1 ./...                                   # 151 тест, ~25–45 с
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
@@ -274,7 +264,7 @@ assets/              PNG стикеров (go:embed) и CREDITS.md про их �
 
 | Модель (`model_name`) | Что это | В этом репозитории |
 |---|---|---|
-| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, фиксы старта бота и `/ai`, тесты `config.json`/меню команд, тесты `/mp3`/`/download` на реальном `yt-dlp`, конфигурация через `.env`, README |
+| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, фиксы старта бота и `/ai`, тесты меню команд, тесты `/mp3`/`/download` на реальном `yt-dlp`, конфигурация через `.env`, README |
 | `qwen3.8-flash-next-iq3_xxs` | Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | `e55e505` (go:embed), `30415bd` (тесты хелперов + фикс `RandInt`) |
 | `qwen3.8-flash-next` | она же, до отдельного кванта | `4ab27c5` — первый ИИ-коммит (`bot_api_url` для всех API-вызовов) |
 | `orcarouter-qwen3.8-flash-next-uncensored-iq3_xxs` | Qwen3.8-Flash-Next Uncensored, IQ3_XXS | настроена в `~/.strata`, к этому коду не применялась |

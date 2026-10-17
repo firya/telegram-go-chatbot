@@ -17,10 +17,10 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 )
 
-// TestAiInit covers the agent build: the model is pointed at the URL from
-// config.json and the system prompt is taken from config.json. The URL is not
-// validated at build time — a bad one only shows up when the agent is called,
-// which is what TestAIStreamError checks.
+// TestAiInit covers the agent build: the model is pointed at the URL from the
+// environment and the system prompt comes from the environment too. The URL is
+// not validated at build time — a bad one only shows up when the agent is
+// called, which is what TestAIStreamError checks.
 func TestAiInit(t *testing.T) {
 	setupTestEnv(t)
 
@@ -450,7 +450,7 @@ func TestGetImageForLLMConcurrentSameFile(t *testing.T) {
 }
 
 // TestSetAISystem covers /setaisystem: the refusal for regular users, and the
-// prompt the admin sets on top of the one from config.json.
+// prompt the admin sets on top of the one from the environment.
 func TestSetAISystem(t *testing.T) {
 	bot, client := setupTestEnv(t)
 
@@ -471,7 +471,7 @@ func TestSetAISystem(t *testing.T) {
 		t.Errorf("SetAISystem (regular user): AISystem = %q, want it untouched", AISystem)
 	}
 
-	// The admin prompt is appended to the prompt from config.json.
+	// The admin prompt is appended to the prompt from the environment.
 	client.clearCalls()
 	if err := SetAISystem(bot, testContext(bot, "/setaisystem новый промпт", testUser(100))); err != nil {
 		t.Fatalf("SetAISystem (admin): %v", err)
