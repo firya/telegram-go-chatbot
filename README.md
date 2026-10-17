@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 86 исходников `.go`, 145 тестов в 22 файлах
+- 91 исходника `.go`, 145 тестов в 22 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -189,12 +189,18 @@ main.go              конфигурация обработчиков и зап
 utils_bot.go         инициализация бота, polling/webhook, middleware+антиспам
 utils_bot_proto.go   MTProto-клиент: подключение, переподключение, таймауты
 utils_config.go      Configuration + чтение config.json
-utils_db.go          модели gorm и AutoMigrate
-utils_common.go      общие хелперы: Reply, поиск юзера, статистика, реакции
-utils_http.go        HTTP-клиент с прокси и таймаутом
+utils_db.go          модели gorm, AutoMigrate, текстовые пулы «да/нет»
+utils_handlers.go    обработчики апдейтов: апдейт юзера, альбом-кэш, проверка банов, реакции
+utils_user.go        имена и меншены юзеров, списки админов, поиск юзера в сообщении и в БД
+utils_stats.go       счётчики статистики сообщений и слов, начало суток
+utils_reply.go       Reply и ReplyAndRemove — чем команды отвечают пользователю
+utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll
+utils_http.go        HTTP-клиент с прокси и таймаутом, DownloadFile
 utils_forward.go     пересылка постов канала
 utils_files.go       go:embed стикеров (assets/*.png)
 utils_plural.go      русские числительные (ruPlural)
+media.go             медиа сообщения: тип, файл, где он лежит на диске
+media_ffmpeg.go      FFmpegConvert — конвертация для /convert, /distort, /invert, /loop
 command_*.go         команды
 duel_*.go            дуэль: request/accept/stats
 pidor_*.go           игра «Пидор Дня!»

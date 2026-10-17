@@ -87,3 +87,15 @@ func DataBaseInit(dsn string) (gorm.DB, error) {
 	}
 	return *database, nil
 }
+
+func GetNope() string {
+	var nope Nope
+	DB.Model(Nope{}).Order("RANDOM()").First(&nope)
+	return nope.Text
+}
+
+func GetBless() string {
+	var bless Bless
+	DB.Model(Bless{}).Order("RANDOM()").First(&bless)
+	return bless.Text
+}

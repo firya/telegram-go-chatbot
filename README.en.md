@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 86 `.go` source files, 145 tests in 22 files
+- 91 `.go` source files, 145 tests in 22 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -190,12 +190,18 @@ main.go              handler configuration and startup
 utils_bot.go         bot init, polling/webhook, middleware + anti-spam
 utils_bot_proto.go   MTProto client: connect, reconnect, timeouts
 utils_config.go      Configuration + reading config.json
-utils_db.go          gorm models and AutoMigrate
-utils_common.go      shared helpers: Reply, user lookup, statistics, reactions
-utils_http.go        HTTP client with proxy and timeout
+utils_db.go          gorm models, AutoMigrate, the "yes/no" text pools
+utils_handlers.go    update handlers: user update, album cache, ban check, reactions
+utils_user.go        user names and mentions, admin lists, finding a user in a message and in the DB
+utils_stats.go       message and word counters, start of day
+utils_reply.go       Reply and ReplyAndRemove — how commands answer the user
+utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll
+utils_http.go        HTTP client with proxy and timeout, DownloadFile
 utils_forward.go     forwarding channel posts
 utils_files.go       go:embed of the sticker images (assets/*.png)
 utils_plural.go      Russian numerals (ruPlural)
+media.go             the media of a message: its type, its file, where it is on disk
+media_ffmpeg.go      FFmpegConvert — the conversion for /convert, /distort, /invert, /loop
 command_*.go         commands
 duel_*.go            duel: request/accept/stats
 pidor_*.go           the "Pidor of the Day!" game
