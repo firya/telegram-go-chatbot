@@ -20,6 +20,7 @@
 .idea
 /bot.db
 /config.json
+.env
 .vscode/launch.json
 __debug_bin
 __debug_bin*

@@ -15,6 +15,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/gotd/contrib v0.25.0
 	github.com/gotd/td v0.162.0
+	github.com/joho/godotenv v1.5.1
 	github.com/miguelmota/go-coinmarketcap v0.1.8
 	github.com/neonxp/StemmerRu v0.0.0-20190528102440-5c7748b15e2f
 	github.com/u2takey/ffmpeg-go v0.5.0

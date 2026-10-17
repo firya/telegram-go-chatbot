@@ -220,13 +220,13 @@ func TestProtoConnectTimeout(t *testing.T) {
 	t.Logf("connectProtoClient reported: %v", err)
 }
 
-// TestMtprotoConnectProbe connects to Telegram with the credentials from
-// config.json and reports why the MTProto client is (not) coming up - the
+// TestMtprotoConnectProbe connects to Telegram with the credentials from .env
+// and reports why the MTProto client is (not) coming up - the
 // commands answer "not connected" exactly while mtprotoAPI() is not ready.
 // It is skipped by default: PROTO_PROBE=1 go test -run TestMtprotoConnectProbe -v
 func TestMtprotoConnectProbe(t *testing.T) {
 	if os.Getenv("PROTO_PROBE") == "" {
-		t.Skip("set PROTO_PROBE=1 to connect to Telegram with config.json credentials")
+		t.Skip("set PROTO_PROBE=1 to connect to Telegram with the .env credentials")
 	}
 
 	oldConfig, oldTimeout := Config, protoConnectTimeout

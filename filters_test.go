@@ -298,7 +298,7 @@ func TestGlobalMiddlewareAccessors(t *testing.T) {
 }
 
 // TestGlobalMiddlewareAntispam covers the anti-spam part of the global
-// middleware: the threshold from config.json (the report fires once the window
+// middleware: the threshold from the config (the report fires once the window
 // holds antispam_count earlier messages, so with 3/30s in the test config the
 // 4th message reports), the 10 second throttle, the window expiry and updates
 // without a sender.
@@ -480,7 +480,7 @@ func waitForCallsContaining(t *testing.T, calls *botAPICalls, want ...string) []
 
 // TestBotInit starts the bot against a local stand-in for the Bot API: the
 // token check, the webhook deletion and the polling must all go to the URL from
-// config.json, and the startup report must reach the sysadmin.
+// ZAVTRA_BOT_API_URL, and the startup report must reach the sysadmin.
 func TestBotInit(t *testing.T) {
 	setupTestEnv(t)
 
@@ -550,7 +550,7 @@ func TestBotInit(t *testing.T) {
 	seen := waitForCallsContaining(t, calls, "getMe", "deleteWebhook", "getUpdates", "sendMessage")
 
 	// The token check, the polling start and the sysadmin report all go to the
-	// API URL from config.json, with the token in the path.
+	// API URL of the config, with the token in the path.
 	for _, entry := range seen {
 		if !strings.HasPrefix(entry.path, "/bot123:abc/") {
 			t.Errorf("%v request path = %q, want it under /bot123:abc/", entry.method, entry.path)
@@ -562,7 +562,7 @@ func TestBotInit(t *testing.T) {
 		}
 	}
 
-	// The startup report is sent to the sysadmin from config.json.
+	// The startup report is sent to the sysadmin of the config.
 	var report *botAPICall
 	for i, entry := range seen {
 		if entry.method == "sendMessage" {
@@ -661,7 +661,7 @@ func TestBotInitWebhook(t *testing.T) {
 	if webhook == nil {
 		t.Fatalf("BotInit (webhook): the API never saw setWebhook")
 	}
-	// The endpoint is the public URL from config.json with the bot username as
+	// The endpoint is the public URL of the config with the bot username as
 	// the path, set with the secret token and the connection limit.
 	if !strings.Contains(webhook.body, "https://example.invalid/testbot") {
 		t.Errorf("BotInit (webhook) setWebhook = %q, want the endpoint under the public URL", webhook.body)

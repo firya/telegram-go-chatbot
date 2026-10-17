@@ -129,7 +129,7 @@ func BotInit() error {
 }
 
 // ErrorReporting is the last resort for errors the dispatcher cannot answer:
-// the sysadmin of config.json gets the text with the token removed. Without a
+// the sysadmin of ZAVTRA_SYSADMIN gets the text with the token removed. Without a
 // sysadmin, or before the bot exists, it stays in the log.
 func ErrorReporting(err error) {
 	Logger.Error(err.Error())

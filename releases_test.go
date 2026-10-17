@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// The feed URL comes from config.json ("releases_url", default
+// The feed URL comes from the config (ZAVTRA_RELEASES_URL, default
 // DefaultReleasesUrl), so the command can be pointed at a test server.
 func TestReleases(t *testing.T) {
 	bot, client := setupTestEnv(t)
@@ -56,7 +56,7 @@ func TestReleasesFeedError(t *testing.T) {
 	}
 }
 
-// "proxy" in config.json is applied through httpClient(); the bare
+// ZAVTRA_PROXY is applied through httpClient(); the bare
 // http.Get/http.Client calls used to ignore HTTPClientProxy entirely.
 func TestHTTPClientUsesProxy(t *testing.T) {
 	oldProxy := HTTPClientProxy

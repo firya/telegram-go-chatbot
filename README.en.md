@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 91 `.go` source files, 145 tests in 22 files
+- 91 `.go` source files, 146 tests in 22 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -25,7 +25,7 @@ State is kept in PostgreSQL.
 | `/remove` | delete the message the command was sent in reply to |
 | `/debug`, `/debuguser`, `/finduserinmessage` | JSON dumps of a message/user for debugging |
 
-Access to moderation commands comes from the `admins` / `moders` / `sysadmin` lists in `config.json`.
+Access to moderation commands comes from the `ZAVTRA_ADMINS` / `ZAVTRA_MODERS` / `ZAVTRA_SYSADMIN` lists.
 
 ### Games and "social"
 | Command | What it does |
@@ -45,8 +45,8 @@ Access to moderation commands comes from the `admins` / `moders` / `sysadmin` li
 |---|---|---|
 | `/meow`, `/mlem`, `/woof` | a gif of a cat / a not-cat | MTProto |
 | `/meme` | a meme from a channel | MTProto |
-| `/convert` | media conversion: `mp3`, `ogg`, `gif`, `audio`, `voice`, `animation` | ffmpeg, `bot_api_datadir` |
-| `/distort`, `/invert`, `/reverse`, `/loop` | mangle / invert / loop media | ffmpeg, `bot_api_datadir` |
+| `/convert` | media conversion: `mp3`, `ogg`, `gif`, `audio`, `voice`, `animation` | ffmpeg, `ZAVTRA_BOT_API_DATADIR` |
+| `/distort`, `/invert`, `/reverse`, `/loop` | mangle / invert / loop media | ffmpeg, `ZAVTRA_BOT_API_DATADIR` |
 | `/mp3` | download audio from a link (YouTube etc.) | yt-dlp, ffmpeg |
 | `/download`, `/wget` | download video from a link | yt-dlp |
 | `/savetopm`, `/giveme`, `/topm` | save a post to PM (copies it into the private chat, the bot must be unblocked) | — |
@@ -68,8 +68,8 @@ Access to moderation commands comes from the `admins` / `moders` / `sysadmin` li
 - **`channel`** — forwards channel posts into the chat; with `stream_channel` set, duplicates them there.
 - **Inline mode** — `@botname <text>` returns the saved gets.
 - **Reactions** in the main chat.
-- **Global middleware** — debug log of every update + anti-spam: more than `antispam_count` messages
-  within `antispam_window` seconds → a warning to `sysadmin` in PM.
+- **Global middleware** — debug log of every update + anti-spam: more than `ZAVTRA_ANTISPAM_COUNT` messages
+  within `ZAVTRA_ANTISPAM_WINDOW` seconds → a warning to `ZAVTRA_SYSADMIN` in PM.
 
 ## Requirements
 
@@ -79,50 +79,72 @@ Access to moderation commands comes from the `admins` / `moders` / `sysadmin` li
 | PostgreSQL | required, tables are created by `AutoMigrate` at startup |
 | ffmpeg, ffprobe | for `/convert`, `/distort`, `/invert`, `/loop`, `/mp3` |
 | yt-dlp | for `/mp3`, `/download` (**not** installed in the Docker image) |
-| Self-hosted Bot API | optional: `bot_api_url` (applied to every API call); `bot_api_datadir` so `GetMedia` reads files straight from disk (for `/convert`, `/distort`, `/invert`, `/loop`) |
+| Self-hosted Bot API | optional: `ZAVTRA_BOT_API_URL` (applied to every API call); `ZAVTRA_BOT_API_DATADIR` so `GetMedia` reads files straight from disk (for `/convert`, `/distort`, `/invert`, `/loop`) |
 | Direct access to Telegram datacenters | for the MTProto commands: TCP to `149.154.*` / `91.108.*:443` plus `app_id`/`app_hash` |
 
 ## Configuration
 
-The bot reads `config.json` from the current directory. If the file is missing, a template is created
-with `0600` permissions. The file is in `.gitignore`.
+Everything is configured through `ZAVTRA_*` environment variables. The bot loads a `.env` file from its
+working directory (`ZAVTRA_ENV_FILE` points somewhere else), and the process environment overrides it:
+the file holds the defaults, the environment holds the overrides. The template is `.env.example`; the
+`.env` itself is in `.gitignore` — it carries the bot token and the database password, keep it `0600`.
 
-| Key | Purpose |
+Docker: `docker run --env-file .env`, compose `env_file: .env`, systemd `EnvironmentFile=`. The `.env`
+never reaches the image (`.dockerignore`).
+
+| Variable | Purpose |
 |---|---|
-| `token` | bot token — **required** |
-| `chat` | ID of the main chat — **required** |
-| `dsn` | PostgreSQL DSN |
-| `bot_api_url` | Bot API base URL (defaults to `https://api.telegram.org`) |
-| `bot_api_datadir` | datadir of a self-hosted Bot API for reading files directly |
-| `app_id`, `app_hash` | credentials of the MTProto app, used by `/meow`, `/woof`, `/meme` |
-| `allowed_updates` | which updates to request |
-| `listen`, `endpoint_public_url`, `max_connections` | webhook mode; if empty — long polling |
-| `reserve_chat` | chat where join/leave messages are deleted |
-| `channel`, `stream_channel` | channel to forward posts from, and where to duplicate them |
-| `admins`, `moders`, `sysadmin` | IDs with moderation rights; `sysadmin` gets start, error and anti-spam notifications |
-| `currency_key` | CoinMarketCap API key for `/cur` |
-| `releases_url` | calendar used by `/releases` (defaults to a PS/PS5/Switch/Xbox PAL calendar) |
-| `proxy` | HTTP proxy for outgoing requests: `/advice`, `/anekdot`, `/releases`, file downloads (10 s timeout) |
-| `antispam_window`, `antispam_count` | window in seconds and message threshold for anti-spam |
-| `ai_url`, `ai_token`, `ai_model`, `ai_system`, `ai_admin_only_tools` | AI module (`ai_*.go`), currently disabled in `main.go` |
-| `fontpath`, `comment_chat` | declared in the config, currently unused in code |
+| `ZAVTRA_TOKEN` | bot token — **required** |
+| `ZAVTRA_CHAT` | ID of the main chat — **required** |
+| `ZAVTRA_DSN` | PostgreSQL DSN |
+| `ZAVTRA_BOT_API_URL` | Bot API base URL (defaults to `https://api.telegram.org`) |
+| `ZAVTRA_BOT_API_DATADIR` | datadir of a self-hosted Bot API for reading files directly |
+| `ZAVTRA_APP_ID`, `ZAVTRA_APP_HASH` | credentials of the MTProto app, used by `/meow`, `/woof`, `/meme` |
+| `ZAVTRA_ALLOWED_UPDATES` | which updates to request (defaults to `message,channel_post,callback_query,chat_member`) |
+| `ZAVTRA_LISTEN`, `ZAVTRA_ENDPOINT_PUBLIC_URL`, `ZAVTRA_MAX_CONNECTIONS` | webhook mode; if empty — long polling |
+| `ZAVTRA_RESERVE_CHAT` | chat where join/leave messages are deleted |
+| `ZAVTRA_CHANNEL`, `ZAVTRA_STREAM_CHANNEL` | channel to forward posts from, and where to duplicate them |
+| `ZAVTRA_ADMINS`, `ZAVTRA_MODERS`, `ZAVTRA_SYSADMIN` | IDs with moderation rights (comma separated lists); `ZAVTRA_SYSADMIN` gets start, error and anti-spam notifications |
+| `ZAVTRA_CURRENCY_KEY` | CoinMarketCap API key for `/cur` |
+| `ZAVTRA_RELEASES_URL` | calendar used by `/releases` (defaults to a PS/PS5/Switch/Xbox PAL calendar) |
+| `ZAVTRA_PROXY` | HTTP proxy for outgoing requests: `/advice`, `/anekdot`, `/releases`, file downloads (10 s timeout) |
+| `ZAVTRA_ANTISPAM_WINDOW`, `ZAVTRA_ANTISPAM_COUNT` | window in seconds and message threshold for anti-spam |
+| `ZAVTRA_AI_URL`, `ZAVTRA_AI_TOKEN`, `ZAVTRA_AI_MODEL`, `ZAVTRA_AI_SYSTEM`, `ZAVTRA_AI_ADMIN_ONLY_TOOLS` | AI module (`ai_*.go`), currently disabled in `main.go` |
+| `ZAVTRA_FONTPATH`, `ZAVTRA_COMMENT_CHAT` | declared in the config, currently unused in code |
+| `ZAVTRA_ENV_FILE` | path of the `.env` file (defaults to `.env` in the working directory) |
+
+Lists are comma separated (spaces and `;` separate as well). Values with spaces, `$`, `#` or newlines go
+in double quotes: `ZAVTRA_AI_SYSTEM="first line\nsecond line"`.
+
+### Moving off config.json
+
+The bot does not read `config.json` anymore. An old file converts in one command — it prints the `.env`
+to stdout, writes nothing and does not start the bot:
+
+```bash
+ZAVTRA_IMPORT_CONFIG_JSON=config.json ./zavtrachat_bot > .env && chmod 600 .env
+```
+
+`600` is not optional: the file holds the bot token and the database password.
 
 ## Running
 
 ```bash
 go build -o zavtrachat_bot
-./zavtrachat_bot            # from the directory that holds config.json
+cp .env.example .env && chmod 600 .env   # fill in the token and the chat
+./zavtrachat_bot            # from the directory that holds .env
 ```
 
 Docker:
 
 ```bash
 docker build -t zavtrachat .
-docker run -d --name zavtrachat -v "$PWD/config.json:/config.json" zavtrachat
+docker run -d --name zavtrachat --env-file .env zavtrachat
 ```
 
-The image has `WORKDIR /`, `ENTRYPOINT /goapp` and ffmpeg installed; the config is mounted at
-`/config.json`. `yt-dlp` is not part of the image — `/mp3` and `/download` will not work in the container.
+The image has `WORKDIR /`, `ENTRYPOINT /goapp` and ffmpeg installed; configuration comes from
+`--env-file .env` (or single `-e ZAVTRA_TOKEN=...`). Secrets are never copied into the image
+(`.dockerignore`). `yt-dlp` is not part of the image — `/mp3` and `/download` will not work in the container.
 
 CI (`.github/workflows/`):
 - `deploy.yml` — on `**.go`, `go.mod`/`go.sum` and workflow changes: `Test` runs `go vet` and
@@ -130,6 +152,11 @@ CI (`.github/workflows/`):
   `push` to `master` `Deploy` builds `telegram-go-chatbot` on a self-hosted runner, copies it to
   `/home/telegram/bot/` and runs `systemctl restart telegram-go-chatbot`. Pull requests run the tests
   only and never restart production; `concurrency` blocks overlapping deploys;
+
+  **The server needs a `.env` in the working directory of the service (`/home/telegram/bot/.env`)** —
+  the configuration is read from the environment only, so without the file the service will not start.
+  Convert the old `config.json` with the command from “Moving off config.json”, `0600`, owned by the
+  service user;
 - `docker-publish_yml` — builds the image and publishes it to `ghcr.io` with a cosign signature.
   **The file is named `_yml` instead of `.yml`, so GitHub Actions never picks it up** (workflows are
   looked for as `*.yml`/`*.yaml`).
@@ -137,7 +164,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 145 tests, ~25–45 s
+go test -race -count=1 ./...                                   # 146 tests, ~25–45 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
@@ -181,7 +208,8 @@ deletion, polling and the sysadmin report; `TestBotInitWebhook` — the webhook 
 `setWebhook` is sent, and a request without the secret token gets 401) and the OpenAI format for `/ai`
 (`TestAIStream`, `TestAIStreamError`, `TestAIWithPhoto`). Special tricks: `TestRestart` reruns the
 process (`os.Exit` inside the handler cannot be checked from the same process), and `TestConfigInit`
-works inside `t.TempDir()` so the `config.json` of the checkout is never touched.
+works inside `t.TempDir()` with a cleared environment (`clearZavtraEnv`) so the `.env` of the
+checkout is never touched.
 
 ## Layout
 
@@ -189,7 +217,7 @@ works inside `t.TempDir()` so the `config.json` of the checkout is never touched
 main.go              handler configuration and startup
 utils_bot.go         bot init, polling/webhook, middleware + anti-spam
 utils_bot_proto.go   MTProto client: connect, reconnect, timeouts
-utils_config.go      Configuration + reading config.json
+utils_config.go      Configuration + the ZAVTRA_* environment variables (.env)
 utils_db.go          gorm models, AutoMigrate, the "yes/no" text pools
 utils_handlers.go    update handlers: user update, album cache, ban check, reactions
 utils_user.go        user names and mentions, admin lists, finding a user in a message and in the DB
@@ -223,12 +251,12 @@ assets/              sticker PNGs (go:embed) and CREDITS.md about their licensin
 - every request has its own deadline (60 s for RPC, 3 min for downloads), read-only requests are retried;
 - `NoUpdates: true` — the bot does not take updates away from the Bot API long polling, MTProto is used
   for RPC only;
-- the `proxy` key does **not** affect MTProto: datacenters are spoken to over direct TCP, so these
+- `ZAVTRA_PROXY` does **not** affect MTProto: datacenters are spoken to over direct TCP, so these
   commands need direct access to `*:443` (or a self-hosted MTProto transit).
 
 ## Known quirks
 
-- `proxy` applies only to the bot's ordinary HTTP requests (advice/anekdot/releases/file downloads);
+- `ZAVTRA_PROXY` applies only to the bot's ordinary HTTP requests (advice/anekdot/releases/file downloads);
   Bot API and MTProto calls do not use it.
 - `/restart` calls `os.Exit(0)` — the restart must be handled by an external supervisor (`Restart=always`
   in systemd, `restart: always` in compose).
@@ -248,7 +276,7 @@ Models of the local Strata stack — configurations in `~/.strata/*.json`, engin
 
 | Model (`model_name`) | What it is | In this repository |
 |---|---|---|
-| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, IQ3_XXS quant (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | current one: test harness, MTProto/plural fixes, command tests, real `yt-dlp` tests for `/mp3` and `/download`, README |
+| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, IQ3_XXS quant (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | current one: test harness, MTProto/plural fixes, command tests, real `yt-dlp` tests for `/mp3` and `/download`, `.env` configuration, README |
 | `qwen3.8-flash-next-iq3_xxs` | Qwen3.8-Flash-Next GSQ RCO, IQ3_XXS quant (`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | `e55e505` (go:embed), `30415bd` (helper tests + `RandInt` fix) |
 | `qwen3.8-flash-next` | the same model, before the separate quant | `4ab27c5` — the first AI commit (`bot_api_url` for all API calls) |
 | `orcarouter-qwen3.8-flash-next-uncensored-iq3_xxs` | Qwen3.8-Flash-Next Uncensored, IQ3_XXS | configured in `~/.strata`, not applied to this code |

@@ -53,7 +53,7 @@ func TestToEntities(t *testing.T) {
 
 // TestCheckToolRestrictions covers the gate the AI agent runs every tool call
 // through: the user is taken from the context, admins and moderators pass, and
-// everyone else is limited by the ai_admin_only_tools list from config.json.
+// everyone else is limited by the ai_admin_only_tools list of the config.
 func TestCheckToolRestrictions(t *testing.T) {
 	setupTestEnv(t) // Config.Admins = [100], Config.Moders = [300]
 

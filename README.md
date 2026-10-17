@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 91 исходника `.go`, 145 тестов в 22 файлах
+- 91 исходника `.go`, 146 тестов в 22 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -25,7 +25,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 | `/remove` | удалить сообщение, ответом на которое послана команда |
 | `/debug`, `/debuguser`, `/finduserinmessage` | JSON-дампы сообщения/юзера для отладки |
 
-Доступ к модерационным командам — по спискам `admins` / `moders` / `sysadmin` в `config.json`.
+Доступ к модерационным командам — по спискам `ZAVTRA_ADMINS` / `ZAVTRA_MODERS` / `ZAVTRA_SYSADMIN`.
 
 ### Игры и «социальное»
 | Команда | Что делает |
@@ -45,8 +45,8 @@ Telegram-бот для одного конкретного чата на Go. Р�
 |---|---|---|
 | `/meow`, `/mlem`, `/woof` | гифка с котиком / не-котиком | MTProto |
 | `/meme` | мем из канала | MTProto |
-| `/convert` | конвертация медиа: `mp3`, `ogg`, `gif`, `audio`, `voice`, `animation` | ffmpeg, `bot_api_datadir` |
-| `/distort`, `/invert`, `/reverse`, `/loop` | «переебать»/инвертировать/залупить медиа | ffmpeg, `bot_api_datadir` |
+| `/convert` | конвертация медиа: `mp3`, `ogg`, `gif`, `audio`, `voice`, `animation` | ffmpeg, `ZAVTRA_BOT_API_DATADIR` |
+| `/distort`, `/invert`, `/reverse`, `/loop` | «переебать»/инвертировать/залупить медиа | ffmpeg, `ZAVTRA_BOT_API_DATADIR` |
 | `/mp3` | скачать аудио по ссылке (YouTube и т. п.) | yt-dlp, ffmpeg |
 | `/download`, `/wget` | скачать видео по ссылке | yt-dlp |
 | `/savetopm`, `/giveme`, `/topm` | сохранить пост в личку (копирует в PM, бот должен быть разблокирован) | — |
@@ -68,8 +68,8 @@ Telegram-бот для одного конкретного чата на Go. Р�
 - **`channel`** — пересылает посты канала в чат; при заданном `stream_channel` дублирует туда.
 - **Inline-режим** — `@botname <текст>` отдаёт сохранённые геты.
 - **Реакции** в основном чате.
-- **Глобальный middleware** — debug-лог каждого апдейта + антиспам: больше `antispam_count` сообщений
-  за `antispam_window` секунд → предупреждение `sysadmin` в личку.
+- **Глобальный middleware** — debug-лог каждого апдейта + антиспам: больше `ZAVTRA_ANTISPAM_COUNT` сообщений
+  за `ZAVTRA_ANTISPAM_WINDOW` секунд → предупреждение `ZAVTRA_SYSADMIN` в личку.
 
 ## Требования
 
@@ -79,49 +79,71 @@ Telegram-бот для одного конкретного чата на Go. Р�
 | PostgreSQL | обязателен, таблицы создаются `AutoMigrate` при старте |
 | ffmpeg, ffprobe | для `/convert`, `/distort`, `/invert`, `/loop`, `/mp3` |
 | yt-dlp | для `/mp3`, `/download` (в Docker-образе **не** установлен) |
-| Self-hosted Bot API | опционально: `bot_api_url` (применяется ко всем API-вызовам); `bot_api_datadir` — чтобы `GetMedia` читал файлы напрямую с диска (для `/convert`, `/distort`, `/invert`, `/loop`) |
+| Self-hosted Bot API | опционально: `ZAVTRA_BOT_API_URL` (применяется ко всем API-вызовам); `ZAVTRA_BOT_API_DATADIR` — чтобы `GetMedia` читал файлы напрямую с диска (для `/convert`, `/distort`, `/invert`, `/loop`) |
 | Прямой доступ к датацентрам Telegram | для MTProto-команд: TCP на `149.154.*` / `91.108.*:443` + `app_id`/`app_hash` |
 
 ## Конфигурация
 
-Бот читает `config.json` из текущей директории. Если файла нет — создаётся шаблон с правами `0600`.
-Файл в `.gitignore`.
+Всё конфигурирование — переменные окружения `ZAVTRA_*`. Бот читает файл `.env` из рабочей директории
+(`ZAVTRA_ENV_FILE` указывает на другой путь), а переменные окружения процесса его перекрывают: файл —
+это настройки по умолчанию, окружение — точечные переопределения. Шаблон — `.env.example`, сам `.env`
+в `.gitignore`: в нём токен бота и пароль базы, держите права `0600`.
 
-| Ключ | Назначение |
+Docker: `docker run --env-file .env`, в compose `env_file: .env`, в systemd `EnvironmentFile=`. В образ
+`.env` не попадает (`.dockerignore`).
+
+| Переменная | Назначение |
 |---|---|
-| `token` | токен бота — **обязателен** |
-| `chat` | ID основного чата — **обязателен** |
-| `dsn` | PostgreSQL DSN |
-| `bot_api_url` | базовый URL Bot API (по умолчанию `https://api.telegram.org`) |
-| `bot_api_datadir` | datadir self-hosted Bot API для прямого чтения файлов |
-| `app_id`, `app_hash` | учётные данные MTProto-приложения для `/meow`, `/woof`, `/meme` |
-| `allowed_updates` | какие апдейты запрашивать |
-| `listen`, `endpoint_public_url`, `max_connections` | webhook-режим; если пусто — long polling |
-| `reserve_chat` | чат, где удаляются сообщения о входе/выходе |
-| `channel`, `stream_channel` | канал для пересылки постов и куда их дублировать |
-| `admins`, `moders`, `sysadmin` | ID с правами модерации; `sysadmin` получает уведомления о старте, ошибках и антиспаме |
-| `currency_key` | CoinMarketCap API key для `/cur` |
-| `releases_url` | календарь для `/releases` (по умолчанию — PS/PS5/Switch/Xbox PAL) |
-| `proxy` | HTTP-прокси для исходящих запросов: `/advice`, `/anekdot`, `/releases`, скачивание файлов (таймаут 10 с) |
-| `antispam_window`, `antispam_count` | окно в секундах и порог сообщений для антиспама |
-| `ai_url`, `ai_token`, `ai_model`, `ai_system`, `ai_admin_only_tools` | AI-модуль (`ai_*.go`), в `main.go` пока выключен |
-| `fontpath`, `comment_chat` | объявлены в конфиге, в коде сейчас не используются |
+| `ZAVTRA_TOKEN` | токен бота — **обязательна** |
+| `ZAVTRA_CHAT` | ID основного чата — **обязательна** |
+| `ZAVTRA_DSN` | PostgreSQL DSN |
+| `ZAVTRA_BOT_API_URL` | базовый URL Bot API (по умолчанию `https://api.telegram.org`) |
+| `ZAVTRA_BOT_API_DATADIR` | datadir self-hosted Bot API для прямого чтения файлов |
+| `ZAVTRA_APP_ID`, `ZAVTRA_APP_HASH` | учётные данные MTProto-приложения для `/meow`, `/woof`, `/meme` |
+| `ZAVTRA_ALLOWED_UPDATES` | какие апдейты запрашивать (по умолчанию `message,channel_post,callback_query,chat_member`) |
+| `ZAVTRA_LISTEN`, `ZAVTRA_ENDPOINT_PUBLIC_URL`, `ZAVTRA_MAX_CONNECTIONS` | webhook-режим; если пусто — long polling |
+| `ZAVTRA_RESERVE_CHAT` | чат, где удаляются сообщения о входе/выходе |
+| `ZAVTRA_CHANNEL`, `ZAVTRA_STREAM_CHANNEL` | канал для пересылки постов и куда их дублировать |
+| `ZAVTRA_ADMINS`, `ZAVTRA_MODERS`, `ZAVTRA_SYSADMIN` | ID с правами модерации (списки через запятую); `ZAVTRA_SYSADMIN` получает уведомления о старте, ошибках и антиспаме |
+| `ZAVTRA_CURRENCY_KEY` | CoinMarketCap API key для `/cur` |
+| `ZAVTRA_RELEASES_URL` | календарь для `/releases` (по умолчанию — PS/PS5/Switch/Xbox PAL) |
+| `ZAVTRA_PROXY` | HTTP-прокси для исходящих запросов: `/advice`, `/anekdot`, `/releases`, скачивание файлов (таймаут 10 с) |
+| `ZAVTRA_ANTISPAM_WINDOW`, `ZAVTRA_ANTISPAM_COUNT` | окно в секундах и порог сообщений для антиспама |
+| `ZAVTRA_AI_URL`, `ZAVTRA_AI_TOKEN`, `ZAVTRA_AI_MODEL`, `ZAVTRA_AI_SYSTEM`, `ZAVTRA_AI_ADMIN_ONLY_TOOLS` | AI-модуль (`ai_*.go`), в `main.go` пока выключен |
+| `ZAVTRA_FONTPATH`, `ZAVTRA_COMMENT_CHAT` | объявлены в конфиге, в коде сейчас не используются |
+| `ZAVTRA_ENV_FILE` | путь к `.env` (по умолчанию `.env` в рабочей директории) |
+
+Списки — через запятую (пробел и `;` тоже разделители). Значения с пробелами, `$`, `#` и переводами
+строк берутся в двойные кавычки: `ZAVTRA_AI_SYSTEM="первая строка\nвторая"`.
+
+### Переход с config.json
+
+`config.json` ботом не читается. Старый файл конвертируется одной командой — она печатает `.env` в
+stdout, ничего не записывает и бота не запускает:
+
+```bash
+ZAVTRA_IMPORT_CONFIG_JSON=config.json ./zavtrachat_bot > .env && chmod 600 .env
+```
+
+Права `600` обязательны: в файле токен бота и пароль базы.
 
 ## Запуск
 
 ```bash
 go build -o zavtrachat_bot
-./zavtrachat_bot            # из каталога, где лежит config.json
+cp .env.example .env && chmod 600 .env   # заполните токен и чат
+./zavtrachat_bot            # из каталога, где лежит .env
 ```
 
 Docker:
 
 ```bash
 docker build -t zavtrachat .
-docker run -d --name zavtrachat -v "$PWD/config.json:/config.json" zavtrachat
+docker run -d --name zavtrachat --env-file .env zavtrachat
 ```
 
-В образе `WORKDIR /`, `ENTRYPOINT /goapp`, установлен ffmpeg; конфиг монтируется в `/config.json`.
+В образе `WORKDIR /`, `ENTRYPOINT /goapp`, установлен ffmpeg; конфигурация — `--env-file .env`
+(или отдельные `-e ZAVTRA_TOKEN=...`). Секреты в образ не копируются (`.dockerignore`).
 `yt-dlp` в образ не входит — `/mp3` и `/download` в контейнере работать не будут.
 
 CI (`.github/workflows/`):
@@ -130,13 +152,18 @@ CI (`.github/workflows/`):
   `master` `Deploy` собирает `telegram-go-chatbot` на self-hosted раннере, копирует его в
   `/home/telegram/bot/` и делает `systemctl restart telegram-go-chatbot`. На pull request тесты
   идут, прод не перезапускается; параллельные деплои блокируются `concurrency`-группой;
+
+  **На сервере в рабочей директории сервиса должен лежать `.env` (`/home/telegram/bot/.env`)** —
+  конфигурация читается только из окружения, без файла сервис не стартует. Старый `config.json`
+  конвертируется командой из раздела «Переход с config.json», права `0600`, владелец — пользователь
+  сервиса;
 - `docker-publish_yml` — сборка и публикация образа в `ghcr.io` + cosign-подпись. **Файл назван с
   `_yml` вместо `.yml`, поэтому GitHub Actions его не подхватывает** (workflows ищут `*.yml`/`*.yaml`).
 
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 145 тестов, ~25–45 с
+go test -race -count=1 ./...                                   # 146 тестов, ~25–45 с
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
@@ -179,8 +206,8 @@ MITM-прокси — `TestMain` генерирует одноразовый CA,
 и отчёт сисадмину; `TestBotInitWebhook` — сервер вебхука поднимается до `setWebhook`, запрос без
 secret-токена получает 401), OpenAI-формат для `/ai` (`TestAIStream`, `TestAIStreamError`,
 `TestAIWithPhoto`). Особые приёмы: `TestRestart` запускает процесс заново (`os.Exit` внутри
-обработчика нельзя проверить из того же процесса), `TestConfigInit` работает в `t.TempDir()`,
-чтобы не трогать `config.json` чекаута.
+обработчика нельзя проверить из того же процесса), `TestConfigInit` работает в `t.TempDir()` и с чистым
+окружением (`clearZavtraEnv`), чтобы не трогать `.env` чекаута.
 
 ## Структура
 
@@ -188,7 +215,7 @@ secret-токена получает 401), OpenAI-формат для `/ai` (`Te
 main.go              конфигурация обработчиков и запуск
 utils_bot.go         инициализация бота, polling/webhook, middleware+антиспам
 utils_bot_proto.go   MTProto-клиент: подключение, переподключение, таймауты
-utils_config.go      Configuration + чтение config.json
+utils_config.go      Configuration + переменные окружения ZAVTRA_* (.env)
 utils_db.go          модели gorm, AutoMigrate, текстовые пулы «да/нет»
 utils_handlers.go    обработчики апдейтов: апдейт юзера, альбом-кэш, проверка банов, реакции
 utils_user.go        имена и меншены юзеров, списки админов, поиск юзера в сообщении и в БД
@@ -221,12 +248,12 @@ assets/              PNG стикеров (go:embed) и CREDITS.md про их �
 - на каждый запрос свой дедлайн (RPC 60 с, скачивание 3 мин), read-only запросы ретраятся;
 - `NoUpdates: true` — бот не забирает апдейты у long polling Bot API, MTProto используется только
   для RPC;
-- ключ `proxy` на MTProto **не влияет**: датацентры диалсятся прямым TCP, поэтому для этих команд
+- `ZAVTRA_PROXY` на MTProto **не влияет**: датацентры диалсятся прямым TCP, поэтому для этих команд
   нужен прямой доступ к `*:443` (или self-hosted MTProto-транзит).
 
 ## Известные особенности
 
-- `proxy` применяется только к обычным HTTP-запросам бота (advice/anekdot/releases/скачивание
+- `ZAVTRA_PROXY` применяется только к обычным HTTP-запросам бота (advice/anekdot/releases/скачивание
   файлов); вызовы Bot API и MTProto его не используют.
 - `/restart` делает `os.Exit(0)` — перезапуск должен обеспечивать внешний супервизор (`Restart=always`
   в systemd, `restart: always` в compose).
@@ -245,7 +272,7 @@ assets/              PNG стикеров (go:embed) и CREDITS.md про их �
 
 | Модель (`model_name`) | Что это | В этом репозитории |
 |---|---|---|
-| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, фиксы старта бота и `/ai`, тесты `config.json`/меню команд, тесты `/mp3`/`/download` на реальном `yt-dlp`, README |
+| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, фиксы старта бота и `/ai`, тесты `config.json`/меню команд, тесты `/mp3`/`/download` на реальном `yt-dlp`, конфигурация через `.env`, README |
 | `qwen3.8-flash-next-iq3_xxs` | Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | `e55e505` (go:embed), `30415bd` (тесты хелперов + фикс `RandInt`) |
 | `qwen3.8-flash-next` | она же, до отдельного кванта | `4ab27c5` — первый ИИ-коммит (`bot_api_url` для всех API-вызовов) |
 | `orcarouter-qwen3.8-flash-next-uncensored-iq3_xxs` | Qwen3.8-Flash-Next Uncensored, IQ3_XXS | настроена в `~/.strata`, к этому коду не применялась |
