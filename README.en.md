@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 92 `.go` source files, 147 tests in 22 files
+- 93 `.go` source files, 152 tests in 23 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -164,7 +164,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 147 tests, ~25–45 s
+go test -race -count=1 ./...                                   # 152 tests, ~25–45 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
@@ -209,7 +209,8 @@ deletion, polling and the sysadmin report; `TestBotInitWebhook` — the webhook 
 (`TestAIStream`, `TestAIStreamError`, `TestAIWithPhoto`). Special tricks: `TestRestart` reruns the
 process (`os.Exit` inside the handler cannot be checked from the same process), and `TestConfigInit`
 works inside `t.TempDir()` with a cleared environment (`clearZavtraEnv`) so the `.env` of the
-checkout is never touched.
+checkout is never touched. `TestStartupReport` checks the startup notice for secrets: the token is not
+in it, and the passwords are stripped from the DSN, the proxy, the app hash and the API keys.
 
 ## Layout
 
@@ -223,6 +224,7 @@ utils_handlers.go    update handlers: user update, album cache, ban check, react
 utils_user.go        user names and mentions, admin lists, finding a user in a message and in the DB
 utils_stats.go       message and word counters, start of day
 utils_reply.go       Reply, ReplyAndRemove and SysAdminReply — how commands answer the user and the sysadmin
+utils_startup.go     the startup notice: build, host, connection, database, chats, tool versions (no credentials)
 utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll
 utils_http.go        HTTP client with proxy and timeout, DownloadFile
 utils_forward.go     forwarding channel posts

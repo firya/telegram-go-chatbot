@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 92 исходника `.go`, 147 тестов в 22 файлах
+- 93 исходника `.go`, 152 теста в 23 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -163,7 +163,7 @@ CI (`.github/workflows/`):
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 147 тестов, ~25–45 с
+go test -race -count=1 ./...                                   # 152 теста, ~25–45 с
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
@@ -207,7 +207,8 @@ MITM-прокси — `TestMain` генерирует одноразовый CA,
 secret-токена получает 401), OpenAI-формат для `/ai` (`TestAIStream`, `TestAIStreamError`,
 `TestAIWithPhoto`). Особые приёмы: `TestRestart` запускает процесс заново (`os.Exit` внутри
 обработчика нельзя проверить из того же процесса), `TestConfigInit` работает в `t.TempDir()` и с чистым
-окружением (`clearZavtraEnv`), чтобы не трогать `.env` чекаута.
+окружением (`clearZavtraEnv`), чтобы не трогать `.env` чекаута. `TestStartupReport` проверяет отчёт о
+старте на секреты: в нём нет токена, а из DSN, прокси, app hash и API-ключей вырезаны пароли.
 
 ## Структура
 
@@ -221,6 +222,7 @@ utils_handlers.go    обработчики апдейтов: апдейт юз�
 utils_user.go        имена и меншены юзеров, списки админов, поиск юзера в сообщении и в БД
 utils_stats.go       счётчики статистики сообщений и слов, начало суток
 utils_reply.go       Reply, ReplyAndRemove и SysAdminReply — чем команды отвечают пользователю и сисадмину
+utils_startup.go     отчёт о старте: сборка, хост, соединение, БД, чаты, версии инструментов (без кредов)
 utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll
 utils_http.go        HTTP-клиент с прокси и таймаутом, DownloadFile
 utils_forward.go     пересылка постов канала

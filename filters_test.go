@@ -587,7 +587,7 @@ func TestBotInit(t *testing.T) {
 	if !strings.Contains(report.body, "name=\"receiver_user_id\"\r\n\r\n7\r\n") {
 		t.Errorf("BotInit startup report = %q, want it addressed to the sysadmin 7", report.body)
 	}
-	if !strings.Contains(report.body, "Connection type: polling") {
+	if !strings.Contains(report.body, "Connection: polling") {
 		t.Errorf("BotInit startup report = %q, want the connection type in it", report.body)
 	}
 }
@@ -686,7 +686,7 @@ func TestBotInitWebhook(t *testing.T) {
 	if report == nil {
 		t.Fatalf("BotInit (webhook): no sendMessage to the sysadmin")
 	}
-	if !strings.Contains(report.body, "Connection type: webhook") {
+	if !strings.Contains(report.body, "Connection: webhook") {
 		t.Errorf("BotInit (webhook) startup report = %q, want the webhook connection type", report.body)
 	}
 

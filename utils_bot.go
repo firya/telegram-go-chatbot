@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -114,14 +112,10 @@ func BotInit() error {
 		}
 	}
 	if Config.SysAdmin != 0 {
-		exPath := "unknown"
-		if ex, err := os.Executable(); err == nil {
-			exPath = filepath.Dir(ex)
-		}
 		// The report is a notice, not a startup requirement: a chat that
 		// refuses it (the bot is not an admin there) must not take the running
 		// bot down.
-		if err := SysAdminReply(fmt.Sprintf("<a href=\"tg://user?id=%v\">Bot</a> has finished starting up.\nConnection type: %v\nAPI Server: %v\nWorking directory: %v\nyt-dlp version: %v", bot.Id, connectionType, bot.GetAPIURL(nil), exPath, ytdlpGetVer())); err != nil {
+		if err := SysAdminReply(startupReport(bot, connectionType)); err != nil {
 			Logger.Warn("startup report failed: " + err.Error())
 		}
 	}
