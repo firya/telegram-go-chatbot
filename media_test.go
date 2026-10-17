@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -304,6 +306,69 @@ func TestMp3(t *testing.T) {
 	}
 	if calls := client.callsFor("sendAudio"); len(calls) != 0 {
 		t.Errorf("Mp3 (bad link): sendAudio calls = %d, want 0", len(calls))
+	}
+}
+
+// TestMp3LocalSource runs /mp3 end to end with the real yt-dlp: the m4a
+// fixture served on the loopback address is picked by the format filter of the
+// handler, ffmpeg extracts the mp3, and the audio is sent with the title
+// yt-dlp reported. The temp file of the download is removed behind the handler.
+func TestMp3LocalSource(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	source := ytdlpFixtureServer(t, "audio") + "/audio.m4a"
+
+	client.clearCalls()
+	// The handler closes and removes the file it sends, so its contents are
+	// read at the moment of the send.
+	var sent []byte
+	client.Observe = func(method string, params map[string]any) {
+		if method != "sendAudio" {
+			return
+		}
+		if file, ok := params["audio"].(*gotgbot.FileReader); ok {
+			sent, _ = io.ReadAll(file.Data)
+		}
+	}
+	msg := testMessage("/mp3 "+source, testUser(42))
+	// The handler names the download after the chat and the message, so the test
+	// uses ids of its own: parallel runs of the suite must not share one temp file.
+	chat, msgId := int64(-1000-os.Getpid()), int64(101)
+	msg.Chat.Id, msg.MessageId = chat, msgId
+	msg.Entities = []gotgbot.MessageEntity{{Type: "url", Offset: 5, Length: int64(len(source)), Url: source}}
+	if err := Mp3(bot, ext.NewContext(bot, &gotgbot.Update{UpdateId: 1, Message: msg}, nil)); err != nil {
+		t.Fatalf("Mp3 (local source): %v", err)
+	}
+
+	calls := client.callsFor("sendAudio")
+	if len(calls) != 1 {
+		t.Fatalf("Mp3 (local source): sendAudio calls = %d, want 1", len(calls))
+	}
+	file, ok := calls[0].Params["audio"].(*gotgbot.FileReader)
+	if !ok {
+		t.Fatalf("Mp3 (local source): audio = %T, want the converted file", calls[0].Params["audio"])
+	}
+	if file.Name != "audio.mp3" {
+		t.Errorf("Mp3 (local source) file name = %q, want the title yt-dlp reported plus the mp3 extension", file.Name)
+	}
+	if len(sent) == 0 {
+		t.Errorf("Mp3 (local source) sent %d bytes, want a converted audio file", len(sent))
+	}
+	sentPath := filepath.Join(t.TempDir(), "sent.mp3")
+	if err := os.WriteFile(sentPath, sent, 0o644); err != nil {
+		t.Fatalf("Mp3 (local source): %v", err)
+	}
+	if values := ffprobeStreamValues(t, sentPath, "codec_name"); !slices.Contains(values, "mp3") {
+		t.Errorf("Mp3 (local source) streams = %v, want the audio converted to mp3", values)
+	}
+	if calls[0].Params["title"] != "audio" {
+		t.Errorf("Mp3 (local source) title = %v, want the title yt-dlp reported", calls[0].Params["title"])
+	}
+	if _, err := os.Stat(filepath.Join(os.TempDir(), fmt.Sprintf("%v_%v.mp3", chat, msgId))); !os.IsNotExist(err) {
+		t.Errorf("Mp3 (local source): the temp file is left behind: %v", err)
+	}
+	if n := len(client.callsFor("sendChatAction")); n < 1 {
+		t.Errorf("Mp3 (local source): sendChatAction calls = %d, want at least 1", n)
 	}
 }
 

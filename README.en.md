@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 86 `.go` source files, 143 tests in 22 files
+- 86 `.go` source files, 145 tests in 22 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -137,31 +137,39 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 143 tests, ~20–40 s
+go test -race -count=1 ./...                                   # 145 tests, ~25–45 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
 The test infrastructure is `testutils_test.go`:
 - a fake Bot API client that records every call the bot makes (the sent text/actions are asserted);
+  the `Observe` hook lets a test look inside a file the handler closes and removes right after sending;
 - in-memory SQLite (`github.com/glebarez/sqlite`, pure Go, no CGO) instead of PostgreSQL;
 - helpers `setupTestEnv`, `testMessage`, `testContext`, `testCallbackContext`, `seedUser`,
   `waitForCalls`.
 
 Tests need no network and no Postgres. Note that tests run on SQLite while production runs on
 PostgreSQL, so production database behaviour is not proven by the tests (`TestDataBaseInit` only
-checks the failure paths). Twelve tests run the real `ffmpeg`/`ffprobe` over generated one-second
+checks the failure paths). Fourteen tests run the real `ffmpeg`/`ffprobe` over generated one-second
 files and skip when the binaries are missing (`TestFFmpegConvert`,
 `TestFFmpegConvertConcurrentSameName`, `TestConvert`, `TestInvert`, `TestDistort`,
 `TestLoopAnimation`, `TestDownloadFile`, `TestFFmpegRemoteMedia`, `TestGetImageForLLM`,
-`TestGetImageForLLMRemote`, `TestGetImageForLLMConcurrentSameFile`, `TestAIWithPhoto`);
-`TestMtprotoConnectProbe` skips without `PROTO_PROBE=1` and `TestYtdlpGetVer` skips without an
-installed `yt-dlp`.
+`TestGetImageForLLMRemote`, `TestGetImageForLLMConcurrentSameFile`, `TestAIWithPhoto`,
+`TestMp3LocalSource`, `TestDownloadLocalSource`); `TestMtprotoConnectProbe` skips without
+`PROTO_PROBE=1` and `TestYtdlpGetVer` skips without an installed `yt-dlp`.
 
 Temporary files of the conversions (`/convert`, `/mp3`, `/download`, the picture for `/ai`) and the
 `/distort` work directories get unique names — `os.CreateTemp`, `chat_id` + `message_id`, and
 `DistortTempDir` for tests. Several runs of the suite on one machine no longer wipe each other's
 files, and concurrent requests for one and the same file no longer read someone else's copy;
 `TestFFmpegConvertConcurrentSameName` and `TestGetImageForLLMConcurrentSameFile` prove it.
+
+`/mp3` and `/download` run against the real `yt-dlp` on local media fixtures: `ytdlpFixtureServer`
+builds a one-second m4a file and an HLS stream with separate video-only and audio-only variants,
+serves them over HTTP on `127.0.0.1`, and `TestMain` takes loopback out of the proxy (`NO_PROXY`) so
+`yt-dlp` reaches the fixture directly. `TestMp3LocalSource` and `TestDownloadLocalSource` check that
+the quality format filter really finds the fixture, that `ffmpeg` merges/converts the tracks, and that
+the file sent out is a finished mp3 and a finished mp4 carrying both tracks.
 
 Tests never leave the machine: all outbound traffic goes to local stand-ins. `mitm_test.go` starts a
 MITM proxy — `TestMain` generates a throwaway CA, points `SSL_CERT_FILE` at it and publishes the proxy
@@ -234,7 +242,7 @@ Models of the local Strata stack — configurations in `~/.strata/*.json`, engin
 
 | Model (`model_name`) | What it is | In this repository |
 |---|---|---|
-| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, IQ3_XXS quant (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | current one: test harness, MTProto/plural fixes, command tests, README |
+| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, IQ3_XXS quant (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | current one: test harness, MTProto/plural fixes, command tests, real `yt-dlp` tests for `/mp3` and `/download`, README |
 | `qwen3.8-flash-next-iq3_xxs` | Qwen3.8-Flash-Next GSQ RCO, IQ3_XXS quant (`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | `e55e505` (go:embed), `30415bd` (helper tests + `RandInt` fix) |
 | `qwen3.8-flash-next` | the same model, before the separate quant | `4ab27c5` — the first AI commit (`bot_api_url` for all API calls) |
 | `orcarouter-qwen3.8-flash-next-uncensored-iq3_xxs` | Qwen3.8-Flash-Next Uncensored, IQ3_XXS | configured in `~/.strata`, not applied to this code |

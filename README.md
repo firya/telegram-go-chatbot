@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 86 исходников `.go`, 143 теста в 22 файлах
+- 86 исходников `.go`, 145 тестов в 22 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -136,31 +136,39 @@ CI (`.github/workflows/`):
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 143 теста, ~20–40 с
+go test -race -count=1 ./...                                   # 145 тестов, ~25–45 с
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
 Инфраструктура тестов — `testutils_test.go`:
 - фейковый Bot API-клиент, записывающий все вызовы бота (проверяется отправленный текст/действия);
+  хук `Observe` даёт заглянуть в файл, который обработчик закрывает и удаляет сразу после отправки;
 - in-memory SQLite (`github.com/glebarez/sqlite`, чистый Go, CGO не нужен) вместо PostgreSQL;
 - хелперы `setupTestEnv`, `testMessage`, `testContext`, `testCallbackContext`, `seedUser`,
   `waitForCalls`.
 
 Сети и Postgres тесты не требуют. Учитывайте: тесты идут на SQLite, прод — на PostgreSQL, поэтому
 поведение БД в проде тестами не доказывается (`TestDataBaseInit` проверяет только пути отказа).
-Зависимости от окружения: двенадцать тестов гоняют настоящие `ffmpeg`/`ffprobe` по сгенерированным
+Зависимости от окружения: четырнадцать тестов гоняют настоящие `ffmpeg`/`ffprobe` по сгенерированным
 секундным файлам и пропускаются, если бинарников нет (`TestFFmpegConvert`,
 `TestFFmpegConvertConcurrentSameName`, `TestConvert`, `TestInvert`, `TestDistort`,
 `TestLoopAnimation`, `TestDownloadFile`, `TestFFmpegRemoteMedia`, `TestGetImageForLLM`,
-`TestGetImageForLLMRemote`, `TestGetImageForLLMConcurrentSameFile`, `TestAIWithPhoto`);
-`TestMtprotoConnectProbe` пропускается без `PROTO_PROBE=1`, `TestYtdlpGetVer` — без установленного
-`yt-dlp`.
+`TestGetImageForLLMRemote`, `TestGetImageForLLMConcurrentSameFile`, `TestAIWithPhoto`,
+`TestMp3LocalSource`, `TestDownloadLocalSource`); `TestMtprotoConnectProbe` пропускается без
+`PROTO_PROBE=1`, `TestYtdlpGetVer` — без установленного `yt-dlp`.
 
 Временные файлы конвертаций (`/convert`, `/mp3`, `/download`, картинка для `/ai`) и рабочие папки
 `/distort` получают уникальные имена — `os.CreateTemp`, `chat_id` + `message_id`, `DistortTempDir`
 для тестов. Поэтому несколько прогонов набора на одной машине не перетирают друг другу файлы, а
 параллельные запросы на один и тот же файл не читают чужую копию; это проверяют
 `TestFFmpegConvertConcurrentSameName` и `TestGetImageForLLMConcurrentSameFile`.
+
+`/mp3` и `/download` работают с реальным `yt-dlp` на локальных медиафикстурах: `ytdlpFixtureServer`
+генерирует секундный m4a-файл и HLS-поток с отдельными видео- и аудиодорожками, отдаёт их по HTTP на
+`127.0.0.1`, а `TestMain` выписывает loopback из прокси (`NO_PROXY`), чтобы `yt-dlp` шёл к фикстуре
+напрямую. `TestMp3LocalSource` и `TestDownloadLocalSource` проверяют, что фильтр форматов выбранного
+качества действительно находит фикстуру, `ffmpeg` склеивает/конвертирует дорожки, а отправленный файл
+— это готовый mp3 и готовый mp4 с обеими дорожками.
 
 Наружу тесты не ходят: весь внешний трафик уходит в локальные заглушки. `mitm_test.go` поднимает
 MITM-прокси — `TestMain` генерирует одноразовый CA, пишет его в `SSL_CERT_FILE` и публикует прокси
@@ -231,7 +239,7 @@ assets/              PNG стикеров (go:embed) и CREDITS.md про их �
 
 | Модель (`model_name`) | Что это | В этом репозитории |
 |---|---|---|
-| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, фиксы старта бота и `/ai`, тесты `config.json`/меню команд, README |
+| `swift-1.5-iq3_xxs` | Swift-1.5 Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | текущая: тест-харнес, фиксы MTProto/числительных, тесты команд, фиксы старта бота и `/ai`, тесты `config.json`/меню команд, тесты `/mp3`/`/download` на реальном `yt-dlp`, README |
 | `qwen3.8-flash-next-iq3_xxs` | Qwen3.8-Flash-Next GSQ RCO, квант IQ3_XXS (`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`) | `e55e505` (go:embed), `30415bd` (тесты хелперов + фикс `RandInt`) |
 | `qwen3.8-flash-next` | она же, до отдельного кванта | `4ab27c5` — первый ИИ-коммит (`bot_api_url` для всех API-вызовов) |
 | `orcarouter-qwen3.8-flash-next-uncensored-iq3_xxs` | Qwen3.8-Flash-Next Uncensored, IQ3_XXS | настроена в `~/.strata`, к этому коду не применялась |

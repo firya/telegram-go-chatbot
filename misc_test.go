@@ -2,9 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -98,6 +102,70 @@ func TestDownload(t *testing.T) {
 	}
 	if n := len(client.callsFor("setMessageReaction")); n != 0 {
 		t.Errorf("Download (remove): setMessageReaction calls = %d, want 0", n)
+	}
+}
+
+// TestDownloadLocalSource runs /download end to end with the real yt-dlp: the
+// HLS fixture on the loopback address offers a video-only and an audio-only
+// variant, the format filter of the handler picks both, ffmpeg merges them into
+// one mp4, and the video is sent with the size yt-dlp reported.
+func TestDownloadLocalSource(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	source := ytdlpFixtureServer(t, "video") + "/master.m3u8"
+
+	client.clearCalls()
+	// The handler closes and removes the file it sends, so its contents are
+	// read at the moment of the send.
+	var sent []byte
+	client.Observe = func(method string, params map[string]any) {
+		if method != "sendVideo" {
+			return
+		}
+		if file, ok := params["video"].(*gotgbot.FileReader); ok {
+			sent, _ = io.ReadAll(file.Data)
+		}
+	}
+	msg := testMessage("/download "+source, testUser(42))
+	// The handler names the download after the chat and the message, so the test
+	// uses ids of its own: parallel runs of the suite must not share one temp file.
+	chat, msgId := int64(-2000-os.Getpid()), int64(102)
+	msg.Chat.Id, msg.MessageId = chat, msgId
+	msg.Entities = []gotgbot.MessageEntity{{Type: "url", Offset: 9, Length: int64(len(source)), Url: source}}
+	if err := Download(bot, ext.NewContext(bot, &gotgbot.Update{UpdateId: 1, Message: msg}, nil)); err != nil {
+		t.Fatalf("Download (local source): %v", err)
+	}
+
+	calls := client.callsFor("sendVideo")
+	if len(calls) != 1 {
+		t.Fatalf("Download (local source): sendVideo calls = %d, want 1", len(calls))
+	}
+	file, ok := calls[0].Params["video"].(*gotgbot.FileReader)
+	if !ok {
+		t.Fatalf("Download (local source): video = %T, want the downloaded file", calls[0].Params["video"])
+	}
+	if file.Name != "master.mp4" {
+		t.Errorf("Download (local source) file name = %q, want the title yt-dlp reported plus the mp4 extension", file.Name)
+	}
+	if len(sent) == 0 {
+		t.Errorf("Download (local source) sent %d bytes, want a downloaded video file", len(sent))
+	}
+	sentPath := filepath.Join(t.TempDir(), "sent.mp4")
+	if err := os.WriteFile(sentPath, sent, 0o644); err != nil {
+		t.Fatalf("Download (local source): %v", err)
+	}
+	values := ffprobeStreamValues(t, sentPath, "codec_type")
+	if !slices.Contains(values, "video") || !slices.Contains(values, "audio") {
+		t.Errorf("Download (local source) streams = %v, want the video-only and the audio-only variant merged into one file", values)
+	}
+	if calls[0].Params["width"] != int64(128) || calls[0].Params["height"] != int64(96) {
+		t.Errorf("Download (local source) size = %v x %v, want 128 x 96", calls[0].Params["width"], calls[0].Params["height"])
+	}
+	if _, err := os.Stat(filepath.Join(os.TempDir(), fmt.Sprintf("%v_%v.mp4", chat, msgId))); !os.IsNotExist(err) {
+		t.Errorf("Download (local source): the temp file is left behind: %v", err)
+	}
+	if n := len(client.callsFor("sendChatAction")); n < 1 {
+		t.Errorf("Download (local source): sendChatAction calls = %d, want at least 1", n)
 	}
 }
 

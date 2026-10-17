@@ -93,6 +93,10 @@ func TestMain(m *testing.M) {
 	envProxy := httptest.NewServer(&mitmProxy{handler: serveEnvStub})
 	os.Setenv("HTTP_PROXY", envProxy.URL)
 	os.Setenv("HTTPS_PROXY", envProxy.URL)
+	// yt-dlp follows the proxy variables as well, and the media fixtures of the
+	// yt-dlp tests are served on the loopback address: loopback stays direct.
+	os.Setenv("NO_PROXY", "127.0.0.1,localhost")
+	os.Setenv("no_proxy", "127.0.0.1,localhost")
 
 	code := m.Run()
 

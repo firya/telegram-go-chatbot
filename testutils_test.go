@@ -38,6 +38,11 @@ type fakeBotClient struct {
 	Results      map[string]json.RawMessage // per-test canned results, override defaults
 	Errors       map[string]error           // per-test API failures, checked before the results
 	MemberStatus map[int64]string           // per-user getChatMember status overrides
+	// Observe is called with every API call while its parameters are still
+	// usable: a handler closes and removes the file it has just sent, so a test
+	// that wants to look inside a sent file has to do it here. The observer must
+	// not call the bot, the client is locked while it runs.
+	Observe func(method string, params map[string]any)
 }
 
 // sentMessageResult is the answer every "send…" method returns by default, so
@@ -85,6 +90,10 @@ func (c *fakeBotClient) RequestWithContext(ctx context.Context, token string, me
 	defer c.mu.Unlock()
 
 	c.Calls = append(c.Calls, fakeCall{Method: method, Params: stored})
+
+	if c.Observe != nil {
+		c.Observe(method, stored)
+	}
 
 	if c.Errors != nil {
 		if err, ok := c.Errors[method]; ok {

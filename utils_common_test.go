@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -353,6 +354,74 @@ func ffmpegMedia(t *testing.T, kind string) string {
 		t.Fatalf("ffmpeg: %v\n%s", err, out)
 	}
 	return path
+}
+
+// ytdlpFixtureServer serves a tiny media fixture over plain HTTP on the
+// loopback address, so the yt-dlp handlers run end to end without leaving the
+// machine. The "audio" fixture is one m4a file: the format filter of /mp3
+// picks it. The "video" fixture is an HLS stream with a video-only and an
+// audio-only variant: the format filter of /download picks both and ffmpeg
+// merges them into one mp4.
+func ytdlpFixtureServer(t *testing.T, kind string) string {
+	t.Helper()
+
+	if _, err := exec.LookPath("yt-dlp"); err != nil {
+		t.Skip("yt-dlp is not installed")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+
+	fixtures := map[string]struct {
+		out  string
+		args []string
+	}{
+		"audio": {"audio.m4a", []string{"-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+			"-c:a", "aac", "-f", "mp4"}},
+		"video": {"av%v.m3u8", []string{"-f", "lavfi", "-i", "testsrc=duration=1:size=128x96:rate=10",
+			"-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-map", "0:v", "-map", "1:a",
+			"-c:v", "libx264", "-c:a", "aac", "-var_stream_map", "v:0 a:0", "-f", "hls",
+			"-hls_time", "1", "-hls_playlist_type", "vod", "-hls_segment_type", "fmp4",
+			"-master_pl_name", "master.m3u8", "-hls_segment_filename", "seg%v%d.m4s"}},
+	}
+	fixture, ok := fixtures[kind]
+	if !ok {
+		t.Fatalf("no yt-dlp fixture %q", kind)
+	}
+
+	dir := t.TempDir()
+	cmd := exec.Command("ffmpeg", append([]string{"-hide_banner", "-loglevel", "fatal"},
+		append(fixture.args, "-y", fixture.out)...)...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("ffmpeg cannot build the %v fixture: %v\n%s", kind, err, out)
+	}
+
+	server := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+// ffprobeStreamValues lists one ffprobe field (codec_name, codec_type, …) of
+// every stream of a file, so a test can check what a conversion produced.
+func ffprobeStreamValues(t *testing.T, path string, entry string) []string {
+	t.Helper()
+
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe is not installed")
+	}
+	out, err := exec.Command("ffprobe", "-v", "error", "-show_entries", "stream="+entry,
+		"-of", "csv=p=0", path).CombinedOutput()
+	if err != nil {
+		t.Fatalf("ffprobe stream=%s of %v: %v\n%s", entry, path, err, out)
+	}
+	var values []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			values = append(values, strings.TrimSpace(line))
+		}
+	}
+	return values
 }
 
 // sentFilePaths lists the local files the fake client was asked to send with
