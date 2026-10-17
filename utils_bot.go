@@ -114,14 +114,15 @@ func BotInit() error {
 		}
 	}
 	if Config.SysAdmin != 0 {
-		ex, err := os.Executable()
-		if err != nil {
-			return err
+		exPath := "unknown"
+		if ex, err := os.Executable(); err == nil {
+			exPath = filepath.Dir(ex)
 		}
-		exPath := filepath.Dir(ex)
-		_, err = bot.SendMessage(Config.SysAdmin, fmt.Sprintf("<a href=\"tg://user?id=%v\">Bot</a> has finished starting up.\nConnection type: %v\nAPI Server: %v\nWorking directory: %v\nyt-dlp version: %v", bot.Id, connectionType, bot.GetAPIURL(nil), exPath, ytdlpGetVer()), &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
-		if err != nil {
-			return err
+		// The report is a notice, not a startup requirement: a chat that
+		// refuses it (the bot is not an admin there) must not take the running
+		// bot down.
+		if err := SysAdminReply(fmt.Sprintf("<a href=\"tg://user?id=%v\">Bot</a> has finished starting up.\nConnection type: %v\nAPI Server: %v\nWorking directory: %v\nyt-dlp version: %v", bot.Id, connectionType, bot.GetAPIURL(nil), exPath, ytdlpGetVer())); err != nil {
+			Logger.Warn("startup report failed: " + err.Error())
 		}
 	}
 
@@ -129,15 +130,18 @@ func BotInit() error {
 }
 
 // ErrorReporting is the last resort for errors the dispatcher cannot answer:
-// the sysadmin of ZAVTRA_SYSADMIN gets the text with the token removed. Without a
-// sysadmin, or before the bot exists, it stays in the log.
+// the sysadmin of ZAVTRA_SYSADMIN gets the text with the token removed as an
+// ephemeral message in the main chat. Without a sysadmin, or before the bot
+// exists, it stays in the log.
 func ErrorReporting(err error) {
 	Logger.Error(err.Error())
 
 	if Bot == nil || Config.SysAdmin == 0 {
 		return
 	}
-	Bot.SendMessage(Config.SysAdmin, strings.ReplaceAll(err.Error(), Config.Token, "TOKEN"), &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
+	// The notice itself is not reported: SysAdminReply answers through the same
+	// Bot, so a failure here would feed ErrorReporting its own error.
+	SysAdminReply(strings.ReplaceAll(err.Error(), Config.Token, "TOKEN"))
 }
 
 func ytdlpGetVer() string {
@@ -304,7 +308,7 @@ func (m *GlobalMiddleware) HandleUpdate(b *gotgbot.Bot, cntx *ext.Context) error
 	if len(validTimestamps) >= Config.AntiSpamCount && now.Unix()-m.lastReportAt[userID] > 10 {
 		m.lastReportAt[userID] = now.Unix()
 		Logger.Warn("[SPAM] " + logText)
-		Bot.SendMessage(Config.SysAdmin, fmt.Sprintf("Возможно спам.\nType: %s\nSender: %s\nChat: %s\nText: <code>%s</code>", cntx.GetType(), sender, chat, text), &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML})
+		SysAdminReply(fmt.Sprintf("Возможно спам.\nType: %s\nSender: %s\nChat: %s\nText: <code>%s</code>", cntx.GetType(), sender, chat, text))
 	}
 
 	validTimestamps = append(validTimestamps, now)

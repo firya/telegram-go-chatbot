@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 91 `.go` source files, 146 tests in 22 files
+- 92 `.go` source files, 147 tests in 22 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -69,7 +69,7 @@ Access to moderation commands comes from the `ZAVTRA_ADMINS` / `ZAVTRA_MODERS` /
 - **Inline mode** — `@botname <text>` returns the saved gets.
 - **Reactions** in the main chat.
 - **Global middleware** — debug log of every update + anti-spam: more than `ZAVTRA_ANTISPAM_COUNT` messages
-  within `ZAVTRA_ANTISPAM_WINDOW` seconds → a warning to `ZAVTRA_SYSADMIN` in PM.
+  within `ZAVTRA_ANTISPAM_WINDOW` seconds → an ephemeral warning for `ZAVTRA_SYSADMIN` in the main chat.
 
 ## Requirements
 
@@ -104,7 +104,7 @@ never reaches the image (`.dockerignore`).
 | `ZAVTRA_LISTEN`, `ZAVTRA_ENDPOINT_PUBLIC_URL`, `ZAVTRA_MAX_CONNECTIONS` | webhook mode; if empty — long polling |
 | `ZAVTRA_RESERVE_CHAT` | chat where join/leave messages are deleted |
 | `ZAVTRA_CHANNEL`, `ZAVTRA_STREAM_CHANNEL` | channel to forward posts from, and where to duplicate them |
-| `ZAVTRA_ADMINS`, `ZAVTRA_MODERS`, `ZAVTRA_SYSADMIN` | IDs with moderation rights (comma separated lists); `ZAVTRA_SYSADMIN` gets start, error and anti-spam notifications |
+| `ZAVTRA_ADMINS`, `ZAVTRA_MODERS`, `ZAVTRA_SYSADMIN` | IDs with moderation rights (comma separated lists); `ZAVTRA_SYSADMIN` gets start, error and anti-spam notifications as ephemeral messages in the main chat (only they can read them, Telegram destroys them by the chat's ephemeral message setting; needs a self-hosted Bot API) |
 | `ZAVTRA_CURRENCY_KEY` | CoinMarketCap API key for `/cur` |
 | `ZAVTRA_RELEASES_URL` | calendar used by `/releases` (defaults to a PS/PS5/Switch/Xbox PAL calendar) |
 | `ZAVTRA_PROXY` | HTTP proxy for outgoing requests: `/advice`, `/anekdot`, `/releases`, file downloads (10 s timeout) |
@@ -164,7 +164,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 146 tests, ~25–45 s
+go test -race -count=1 ./...                                   # 147 tests, ~25–45 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
@@ -222,7 +222,7 @@ utils_db.go          gorm models, AutoMigrate, the "yes/no" text pools
 utils_handlers.go    update handlers: user update, album cache, ban check, reactions
 utils_user.go        user names and mentions, admin lists, finding a user in a message and in the DB
 utils_stats.go       message and word counters, start of day
-utils_reply.go       Reply and ReplyAndRemove — how commands answer the user
+utils_reply.go       Reply, ReplyAndRemove and SysAdminReply — how commands answer the user and the sysadmin
 utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll
 utils_http.go        HTTP client with proxy and timeout, DownloadFile
 utils_forward.go     forwarding channel posts

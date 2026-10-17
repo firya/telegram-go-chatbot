@@ -318,7 +318,8 @@ func TestGlobalMiddlewareAntispam(t *testing.T) {
 		t.Errorf("middleware sent %q below the threshold, want nothing", texts)
 	}
 
-	// Crossing the threshold reports to the sysadmin in PM.
+	// Crossing the threshold reports to the sysadmin as an ephemeral message in
+	// the main chat.
 	if err := m.HandleUpdate(bot, testContext(bot, "привет", testUser(42))); err != nil {
 		t.Fatalf("HandleUpdate (threshold): %v", err)
 	}
@@ -326,8 +327,11 @@ func TestGlobalMiddlewareAntispam(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("middleware sendMessage calls = %d, want 1", len(calls))
 	}
-	if calls[0].Params["chat_id"] != int64(Config.SysAdmin) {
-		t.Errorf("spam report chat_id = %v, want sysadmin %d", calls[0].Params["chat_id"], Config.SysAdmin)
+	if calls[0].Params["chat_id"] != int64(Config.Chat) {
+		t.Errorf("spam report chat_id = %v, want the main chat %d", calls[0].Params["chat_id"], Config.Chat)
+	}
+	if calls[0].Params["receiver_user_id"] != int64(Config.SysAdmin) {
+		t.Errorf("spam report receiver_user_id = %v, want the sysadmin %d", calls[0].Params["receiver_user_id"], Config.SysAdmin)
 	}
 	text, _ := calls[0].Params["text"].(string)
 	if !strings.Contains(text, "Возможно спам") || !strings.Contains(text, "привет") {
@@ -378,8 +382,9 @@ func TestGlobalMiddlewareAntispam(t *testing.T) {
 	}
 }
 
-// TestErrorReporting covers the sysadmin notification: the bot token must not
-// leak into the message.
+// TestErrorReporting covers the sysadmin notification: the text goes to the
+// main chat as an ephemeral message for the sysadmin, and the bot token must
+// not leak into it.
 func TestErrorReporting(t *testing.T) {
 	_, client := setupTestEnv(t)
 	Config.Token = "123456:TESTTOKEN"
@@ -390,8 +395,11 @@ func TestErrorReporting(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("ErrorReporting sendMessage calls = %d, want 1", len(calls))
 	}
-	if calls[0].Params["chat_id"] != int64(Config.SysAdmin) {
-		t.Errorf("ErrorReporting chat_id = %v, want sysadmin %d", calls[0].Params["chat_id"], Config.SysAdmin)
+	if calls[0].Params["chat_id"] != int64(Config.Chat) {
+		t.Errorf("ErrorReporting chat_id = %v, want the main chat %d", calls[0].Params["chat_id"], Config.Chat)
+	}
+	if calls[0].Params["receiver_user_id"] != int64(Config.SysAdmin) {
+		t.Errorf("ErrorReporting receiver_user_id = %v, want the sysadmin %d", calls[0].Params["receiver_user_id"], Config.SysAdmin)
 	}
 	text, _ := calls[0].Params["text"].(string)
 	if strings.Contains(text, "TESTTOKEN") {
@@ -562,7 +570,7 @@ func TestBotInit(t *testing.T) {
 		}
 	}
 
-	// The startup report is sent to the sysadmin of the config.
+	// The startup report is an ephemeral message for the sysadmin in the main chat.
 	var report *botAPICall
 	for i, entry := range seen {
 		if entry.method == "sendMessage" {
@@ -573,7 +581,10 @@ func TestBotInit(t *testing.T) {
 		t.Fatalf("BotInit: no sendMessage to the sysadmin")
 	}
 	// The API sends the parameters as multipart form data.
-	if !strings.Contains(report.body, "name=\"chat_id\"\r\n\r\n7\r\n") {
+	if !strings.Contains(report.body, "name=\"chat_id\"\r\n\r\n-100\r\n") {
+		t.Errorf("BotInit startup report = %q, want it addressed to the main chat %d", report.body, Config.Chat)
+	}
+	if !strings.Contains(report.body, "name=\"receiver_user_id\"\r\n\r\n7\r\n") {
 		t.Errorf("BotInit startup report = %q, want it addressed to the sysadmin 7", report.body)
 	}
 	if !strings.Contains(report.body, "Connection type: polling") {

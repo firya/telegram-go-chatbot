@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 94 команды, зарегистрированные в `main.go` (часть — алиасы одной функции)
-- 91 исходника `.go`, 146 тестов в 22 файлах
+- 92 исходника `.go`, 147 тестов в 22 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -69,7 +69,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 - **Inline-режим** — `@botname <текст>` отдаёт сохранённые геты.
 - **Реакции** в основном чате.
 - **Глобальный middleware** — debug-лог каждого апдейта + антиспам: больше `ZAVTRA_ANTISPAM_COUNT` сообщений
-  за `ZAVTRA_ANTISPAM_WINDOW` секунд → предупреждение `ZAVTRA_SYSADMIN` в личку.
+  за `ZAVTRA_ANTISPAM_WINDOW` секунд → эфемерное предупреждение `ZAVTRA_SYSADMIN` в основном чате.
 
 ## Требования
 
@@ -104,7 +104,7 @@ Docker: `docker run --env-file .env`, в compose `env_file: .env`, в systemd `E
 | `ZAVTRA_LISTEN`, `ZAVTRA_ENDPOINT_PUBLIC_URL`, `ZAVTRA_MAX_CONNECTIONS` | webhook-режим; если пусто — long polling |
 | `ZAVTRA_RESERVE_CHAT` | чат, где удаляются сообщения о входе/выходе |
 | `ZAVTRA_CHANNEL`, `ZAVTRA_STREAM_CHANNEL` | канал для пересылки постов и куда их дублировать |
-| `ZAVTRA_ADMINS`, `ZAVTRA_MODERS`, `ZAVTRA_SYSADMIN` | ID с правами модерации (списки через запятую); `ZAVTRA_SYSADMIN` получает уведомления о старте, ошибках и антиспаме |
+| `ZAVTRA_ADMINS`, `ZAVTRA_MODERS`, `ZAVTRA_SYSADMIN` | ID с правами модерации (списки через запятую); `ZAVTRA_SYSADMIN` получает уведомления о старте, ошибках и антиспаме эфемерными сообщениями в основном чате (видит только он, Telegram удаляет их по настройке «эфемерные сообщения» чата; нужен self-hosted Bot API) |
 | `ZAVTRA_CURRENCY_KEY` | CoinMarketCap API key для `/cur` |
 | `ZAVTRA_RELEASES_URL` | календарь для `/releases` (по умолчанию — PS/PS5/Switch/Xbox PAL) |
 | `ZAVTRA_PROXY` | HTTP-прокси для исходящих запросов: `/advice`, `/anekdot`, `/releases`, скачивание файлов (таймаут 10 с) |
@@ -163,7 +163,7 @@ CI (`.github/workflows/`):
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 146 тестов, ~25–45 с
+go test -race -count=1 ./...                                   # 147 тестов, ~25–45 с
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
@@ -220,7 +220,7 @@ utils_db.go          модели gorm, AutoMigrate, текстовые пулы
 utils_handlers.go    обработчики апдейтов: апдейт юзера, альбом-кэш, проверка банов, реакции
 utils_user.go        имена и меншены юзеров, списки админов, поиск юзера в сообщении и в БД
 utils_stats.go       счётчики статистики сообщений и слов, начало суток
-utils_reply.go       Reply и ReplyAndRemove — чем команды отвечают пользователю
+utils_reply.go       Reply, ReplyAndRemove и SysAdminReply — чем команды отвечают пользователю и сисадмину
 utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll
 utils_http.go        HTTP-клиент с прокси и таймаутом, DownloadFile
 utils_forward.go     пересылка постов канала

@@ -1,7 +1,8 @@
 package main
 
 // Reply is how the commands answer the user; ReplyAndRemove answers with a message that is
-// deleted after 30 seconds.
+// deleted after 30 seconds; SysAdminReply delivers the operational notices (the startup
+// report, handler errors, spam warnings) to the sysadmin.
 
 import (
 	"time"
@@ -16,6 +17,28 @@ func Reply(message string, context ext.Context) error {
 		return err
 	}
 	return nil
+}
+
+// SysAdminReply sends an operational notice to the main chat as an ephemeral
+// message: only the sysadmin of the config can read it, and Telegram destroys
+// it after the chat's ephemeral validity, so nothing piles up in the chat.
+// Without a main chat the notice falls back to the sysadmin's private chat,
+// where ephemeral messages do not exist.
+func SysAdminReply(message string) error {
+	if Bot == nil || Config.SysAdmin == 0 {
+		return nil
+	}
+
+	opts := &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML}
+	chatId := Config.Chat
+	if chatId == 0 {
+		chatId = Config.SysAdmin
+	} else {
+		opts.ReceiverUserId = Config.SysAdmin
+	}
+
+	_, err := Bot.SendMessage(chatId, message, opts)
+	return err
 }
 
 func ReplyAndRemove(message string, context ext.Context) error {

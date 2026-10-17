@@ -703,6 +703,73 @@ func TestReplyAndRemove(t *testing.T) {
 	}
 }
 
+// TestSysAdminReply covers where the operational notices go: an ephemeral
+// message for the sysadmin in the main chat, the sysadmin's private chat when
+// no main chat is configured (ephemeral messages do not exist there), and
+// nothing at all when there is no sysadmin or no bot to send with.
+func TestSysAdminReply(t *testing.T) {
+	_, client := setupTestEnv(t)
+
+	if err := SysAdminReply("готово"); err != nil {
+		t.Fatalf("SysAdminReply: %v", err)
+	}
+	calls := client.callsFor("sendMessage")
+	if len(calls) != 1 {
+		t.Fatalf("SysAdminReply sendMessage calls = %d, want 1", len(calls))
+	}
+	if calls[0].Params["chat_id"] != int64(Config.Chat) {
+		t.Errorf("SysAdminReply chat_id = %v, want the main chat %d", calls[0].Params["chat_id"], Config.Chat)
+	}
+	if calls[0].Params["receiver_user_id"] != int64(Config.SysAdmin) {
+		t.Errorf("SysAdminReply receiver_user_id = %v, want the sysadmin %d", calls[0].Params["receiver_user_id"], Config.SysAdmin)
+	}
+	if texts := client.sentTexts(); len(texts) != 1 || texts[0] != "готово" {
+		t.Errorf("SysAdminReply sent %q, want the text unchanged", texts)
+	}
+
+	// Without a main chat the notice goes to the private chat, where the
+	// ephemeral receiver is not part of the request.
+	client.Calls = nil
+	Config.Chat = 0
+	if err := SysAdminReply("личкой"); err != nil {
+		t.Fatalf("SysAdminReply (no main chat): %v", err)
+	}
+	calls = client.callsFor("sendMessage")
+	if len(calls) != 1 {
+		t.Fatalf("SysAdminReply (no main chat) sendMessage calls = %d, want 1", len(calls))
+	}
+	if calls[0].Params["chat_id"] != int64(Config.SysAdmin) {
+		t.Errorf("SysAdminReply (no main chat) chat_id = %v, want the sysadmin %d", calls[0].Params["chat_id"], Config.SysAdmin)
+	}
+	if _, ok := calls[0].Params["receiver_user_id"]; ok {
+		t.Errorf("SysAdminReply (no main chat) sent receiver_user_id, want a plain private message")
+	}
+
+	// A chat that refuses the message answers with the API error: the caller
+	// decides what to do with it, ErrorReporting must not feed on it.
+	client.Calls = nil
+	client.setError("sendMessage", errors.New("Bad Request: BOT_NOT_ADMIN"))
+	if err := SysAdminReply("готово"); err == nil {
+		t.Errorf("SysAdminReply (send failure): err = nil, want the API error")
+	}
+
+	// No sysadmin, no bot: nothing is sent.
+	client.Calls = nil
+	client.Errors = nil
+	Config.SysAdmin = 0
+	if err := SysAdminReply("готово"); err != nil {
+		t.Errorf("SysAdminReply (no sysadmin): %v", err)
+	}
+	Config.SysAdmin = 100
+	Bot = nil
+	if err := SysAdminReply("готово"); err != nil {
+		t.Errorf("SysAdminReply (no bot): %v", err)
+	}
+	if calls := client.callsFor("sendMessage"); len(calls) != 0 {
+		t.Errorf("SysAdminReply: sendMessage calls = %d, want none without a sysadmin or a bot", len(calls))
+	}
+}
+
 // TestStatsCounters covers the counters behind the statistics: statsIncrease
 // creates the row of a day and increments it, getWordID stores one row per
 // stemmed word, and the refusal and blessing pools answer from the database.
