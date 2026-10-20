@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 90 commands registered in `main.go` (some of them are aliases of the same function)
-- 93 `.go` source files, 154 tests in 23 files
+- 93 `.go` source files, 153 tests in 23 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -56,7 +56,7 @@ Access to moderation commands comes from the `ZAVTRA_ADMINS` / `ZAVTRA_MODERS` /
 |---|---|
 | `/get`, `/getall`, `/set`, `/del`, `/setgetowner` | "gets" — saved bot answers (text/media), inline selection via `@botname` |
 | `/sed`, `/khaleesi`, `/say` | pattern-based text replacement, meme-khaleesi, making the bot say a text |
-| `/stats` | chat statistics (webapp) and tops: `likes`/`reactions` (likes per message), `mutes`/`blessings` (deaths), `mutetime`/`blesstime` (time muted), `messages`, `words`; period `day`/`week`, no period means all time |
+| `/stats` | chat tops: `likes`/`reactions` (likes per message), `mutes`/`blessings` (deaths), `mutetime`/`blesstime` (time muted), `messages`, `words`; period `day`/`week`, no period means all time |
 | `/advice`, `/anekdot`, `/releases` | an advice, a joke, a list of game releases |
 | `/cur` | currency rates (needs `currency_key`) |
 | `/google` | a search link for the given text |

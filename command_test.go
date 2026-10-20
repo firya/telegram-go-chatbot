@@ -60,27 +60,16 @@ func TestDate(t *testing.T) {
 	}
 }
 
-func TestStatsLinks(t *testing.T) {
-	bot, client := setupTestEnv(t)
-	if err := StatsLinks(bot, testContext(bot, "/stats", testUser(42))); err != nil {
-		t.Fatalf("StatsLinks: %v", err)
-	}
-	texts := client.sentTexts()
-	if len(texts) != 1 || !strings.Contains(texts[0], "t.me/zavtrachat_bot/stats") || !strings.Contains(texts[0], "grafana") {
-		t.Errorf("StatsLinks sent %q", texts)
-	}
-}
-
 func TestStatsTop(t *testing.T) {
 	bot, client := setupTestEnv(t)
 
-	// No argument -> dashboard links plus the list of tops.
+	// No argument -> the list of tops.
 	if err := StatsTop(bot, testContext(bot, "/stats", testUser(42))); err != nil {
 		t.Fatalf("StatsTop (no args): %v", err)
 	}
 	texts := client.sentTexts()
-	if len(texts) != 1 || !strings.Contains(texts[0], "grafana") || !strings.Contains(texts[0], "/stats likes") {
-		t.Errorf("StatsTop (no args) sent %q, want links and usage", texts)
+	if len(texts) != 1 || !strings.Contains(texts[0], "/stats likes") {
+		t.Errorf("StatsTop (no args) sent %q, want usage", texts)
 	}
 
 	// Unknown top and unknown period.

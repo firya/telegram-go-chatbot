@@ -10,9 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// The webapp and dashboard links every /stats answer carries.
-const statsLinksText = "<a href='https://t.me/zavtrachat_bot/stats'>Webapp</a>\n<a href='https://zavtrabot.nexon.su/grafana/d/zavtrachatstats?kiosk'>Прямая ссылка</a>"
-
 // statsTopKinds maps the /stats argument to the stat type it ranks and the
 // title of the top. Aliases share the stat type but keep their own wording:
 // likes/reactions, mutes/blessings, mutetime/blesstime.
@@ -30,11 +27,6 @@ var statsTopKinds = map[string]struct {
 	"words":     {4, "по словам"},
 }
 
-// Reply with stats link
-func StatsLinks(bot *gotgbot.Bot, context *ext.Context) error {
-	return Reply(statsLinksText, *context)
-}
-
 // chatMessageLink builds a t.me link to a message of the chat: private
 // chats use the numeric "c/" form with the -100 prefix stripped.
 func chatMessageLink(chatID int64, messageID int64) string {
@@ -45,13 +37,13 @@ func chatMessageLink(chatID int64, messageID int64) string {
 // table: likes (stat type 6, counted per message), deaths (stat type 8),
 // mute time in seconds (stat type 7), messages (stat type 3) and words
 // (stat type 4, context_id is the StatsWords id). Without arguments it
-// replies with the dashboard links.
+// replies with the list of tops.
 func StatsTop(bot *gotgbot.Bot, context *ext.Context) error {
 	// context.Args() starts with the command itself: args[1] is the top,
 	// args[2] the optional period.
 	args := context.Args()
 	if len(args) < 2 || args[1] == "" {
-		return Reply(statsLinksText+"\n\nТопы: <code>/stats likes</code>, <code>/stats mutes</code>, <code>/stats mutetime</code>, <code>/stats messages</code>, <code>/stats words</code>\nПериод: <code>day</code> (сутки) или <code>week</code> (неделя), без периода — за всё время.", *context)
+		return Reply("Топы: <code>/stats likes</code>, <code>/stats mutes</code>, <code>/stats mutetime</code>, <code>/stats messages</code>, <code>/stats words</code>\nПериод: <code>day</code> (сутки) или <code>week</code> (неделя), без периода — за всё время.", *context)
 	}
 	kind, ok := statsTopKinds[strings.ToLower(args[1])]
 	if !ok {

@@ -41,7 +41,7 @@ func commandListConfig() []commandList {
 		{gotgbot.BotCommand{Command: "khaleesi", Description: "заменить текст типо как кхалиси мем", IsEphemeral: true}, Khaleesi},
 		{gotgbot.BotCommand{Command: "set", Description: "сохранить гет", IsEphemeral: true}, Set},
 		{gotgbot.BotCommand{Command: "shrug", Description: "¯\\_(ツ)_/¯", IsEphemeral: true}, Shrug},
-		{gotgbot.BotCommand{Command: "stats", Description: "статистика чата и топы (likes, mutes, mutetime, messages, words)", IsEphemeral: true}, StatsTop},
+		{gotgbot.BotCommand{Command: "stats", Description: "топы чата (likes, mutes, mutetime, messages, words)", IsEphemeral: true}, StatsTop},
 		{gotgbot.BotCommand{Command: "get", Description: "получить гет", IsEphemeral: true}, GetGet},
 		{gotgbot.BotCommand{Command: "getall", Description: "получить список гетов", IsEphemeral: true}, Getall},
 		{gotgbot.BotCommand{Command: "giveme", Description: "сохранить пост в личку", IsEphemeral: true}, SaveToPM},
