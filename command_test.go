@@ -292,13 +292,13 @@ func TestKhaleesi(t *testing.T) {
 
 	// With reply -> text distorted, command message removed.
 	client.Calls = nil
-	replyTo := testMessage("нет", &targetUser)
+	replyTo := testMessage("что", &targetUser)
 	if err := Khaleesi(bot, testReplyContext(bot, "/khaleesi", testUser(42), replyTo)); err != nil {
 		t.Fatalf("Khaleesi: %v", err)
 	}
 	texts = client.sentTexts()
-	if len(texts) != 1 || texts[0] != "нит" {
-		t.Errorf("Khaleesi sent %q, want [нит]", texts)
+	if len(texts) != 1 || texts[0] != "стё" {
+		t.Errorf("Khaleesi sent %q, want [стё]", texts)
 	}
 	if len(client.callsFor("deleteMessage")) != 1 {
 		t.Errorf("Khaleesi: deleteMessage calls = %d, want 1", len(client.callsFor("deleteMessage")))
