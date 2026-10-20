@@ -562,6 +562,14 @@ func TestDuelAcceptFull(t *testing.T) {
 	if deaths != 1 || kills != 1 {
 		t.Errorf("Accept: total deaths = %d kills = %d, want 1 and 1 (duelists: %v)", deaths, kills, duelists)
 	}
+	// The duelist who died owns the mute time (stat type 7), the winner none.
+	want := announcedSeconds(t, final)
+	if total := muteSeconds(t, 42) + muteSeconds(t, 777); total != want {
+		t.Errorf("Accept: total mute seconds = %d, want %d", total, want)
+	}
+	if muteSeconds(t, 42) != 0 && muteSeconds(t, 777) != 0 {
+		t.Error("Accept: only the duelist who died should gain mute time")
+	}
 	if busy["russianrouletteInProgress"] {
 		t.Error("Accept: duel should not stay in progress")
 	}

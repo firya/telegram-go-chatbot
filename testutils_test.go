@@ -322,6 +322,18 @@ func seedUser(id int64, username, firstName string) {
 	}
 }
 
+// muteSeconds sums the stat type 7 (mute time in seconds) rows of a user,
+// 0 when the user has never been muted.
+func muteSeconds(t *testing.T, userID int64) int64 {
+	t.Helper()
+	var total int64
+	if err := DB.Model(&Stats{}).Where("stat_type = 7 AND context_id = ?", userID).
+		Select("COALESCE(SUM(count), 0)").Scan(&total).Error; err != nil {
+		t.Fatalf("muteSeconds(%v): %v", userID, err)
+	}
+	return total
+}
+
 // minutesRE matches a count written out with the declined minute noun,
 // e.g. "12 минут", "1 минуту".
 var minutesRE = regexp.MustCompile(`(\d+) (минуту|минуты|минут)`)

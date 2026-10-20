@@ -99,6 +99,8 @@ func Blessing(bot *gotgbot.Bot, context *ext.Context) error {
 	if err != nil {
 		return err
 	}
+	// Mute time (stat type 7) accumulates the restriction in seconds.
+	statsAdd(7, GetStartOfDay(), ChatMember.GetUser().Id, int64(duration)*60)
 	burst++
 	if time.Now().Unix() > firstSuicide+120 {
 		firstSuicide = time.Now().Unix()

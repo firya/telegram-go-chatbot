@@ -6,8 +6,8 @@ A Go Telegram bot for one specific chat. It works through the Bot API (long poll
 self-hosted Bot API server supported) and additionally uses an MTProto client for a few commands.
 State is kept in PostgreSQL.
 
-- 94 commands registered in `main.go` (some of them are aliases of the same function)
-- 93 `.go` source files, 151 tests in 23 files
+- 91 commands registered in `main.go` (some of them are aliases of the same function)
+- 94 `.go` source files, 154 tests in 23 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -20,6 +20,7 @@ State is kept in PostgreSQL.
 |---|---|
 | `/ban`, `/unban` | ban / unban, optional duration in seconds (`/ban @user 3600`) |
 | `/mute`, `/unmute` | mute / unmute, optional duration in seconds |
+| `/mutetop` | chat top by total time spent muted (`/kill`, `/mute`, duels, `/warn`, etc.) |
 | `/kick` | kick (ban + unban, so the user can come back through an invite link) |
 | `/warn`, `/mywarns` | warn somebody / how many warnings I have |
 | `/remove` | delete the message the command was sent in reply to |
@@ -154,7 +155,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 151 tests, ~25–45 s
+go test -race -count=1 ./...                                   # 154 tests, ~25–45 s
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
@@ -212,7 +213,7 @@ utils_config.go      Configuration + the ZAVTRA_* environment variables (.env)
 utils_db.go          gorm models, AutoMigrate, the "yes/no" text pools
 utils_handlers.go    update handlers: user update, album cache, ban check, reactions
 utils_user.go        user names and mentions, admin lists, finding a user in a message and in the DB
-utils_stats.go       message and word counters, start of day
+utils_stats.go       message, word and mute-time counters, start of day
 utils_reply.go       Reply, ReplyAndRemove and SysAdminReply — how commands answer the user and the sysadmin
 utils_startup.go     the startup notice: build, host, connection, database, chats, tool versions (no credentials)
 utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll

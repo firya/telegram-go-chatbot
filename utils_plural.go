@@ -6,6 +6,11 @@ package main
 // The comment in the commands ("prt will replace fmt ... according plurals
 // defined in utils package") describes what ruPlural does here.
 
+import (
+	"fmt"
+	"strings"
+)
+
 // ruPlural returns the correct Russian noun form for a count:
 //
 //	ruPlural(1, "победа", "победы", "побед") // "победа"
@@ -34,4 +39,33 @@ func ruPlural[T int | int64](count T, one, few, many string) string {
 	default:
 		return many
 	}
+}
+
+// formatDuration spells a number of seconds out as a Russian duration with
+// the units declined by ruPlural, dropping units that are zero:
+//
+//	formatDuration(45)    // "45 секунд"
+//	formatDuration(90)    // "1 минута"
+//	formatDuration(3725)  // "1 час 2 минуты"
+//
+// The units are in the nominative case, as befits a standalone listing
+// ("2 минуты"), not the accusative a "на N минут" phrase would need.
+func formatDuration(seconds int64) string {
+	if seconds < 60 {
+		return fmt.Sprintf("%d %v", seconds, ruPlural(seconds, "секунда", "секунды", "секунд"))
+	}
+	var parts []string
+	if days := seconds / 86400; days > 0 {
+		parts = append(parts, fmt.Sprintf("%d %v", days, ruPlural(days, "день", "дня", "дней")))
+	}
+	if hours := seconds % 86400 / 3600; hours > 0 {
+		parts = append(parts, fmt.Sprintf("%d %v", hours, ruPlural(hours, "час", "часа", "часов")))
+	}
+	if minutes := seconds % 3600 / 60; minutes > 0 {
+		parts = append(parts, fmt.Sprintf("%d %v", minutes, ruPlural(minutes, "минута", "минуты", "минут")))
+	}
+	if rest := seconds % 60; rest > 0 {
+		parts = append(parts, fmt.Sprintf("%d %v", rest, ruPlural(rest, "секунда", "секунды", "секунд")))
+	}
+	return strings.Join(parts, " ")
 }

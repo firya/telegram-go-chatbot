@@ -352,6 +352,10 @@ func TestWarnUser(t *testing.T) {
 	}
 	// The mute lasts a week.
 	assertUntilDate(t, restricts[0].Params, time.Now().Add(168*time.Hour))
+	// A week of mute is counted into the mute-time stats (stat type 7).
+	if got := muteSeconds(t, targetUser.Id); got != 168*3600 {
+		t.Errorf("WarnUser (3rd): mute seconds = %d, want %d", got, 168*3600)
+	}
 	texts = client.sentTexts()
 	if len(texts) < 2 || !strings.Contains(texts[0], "ты набрал 3 предупреждения") {
 		t.Errorf("WarnUser (3rd) sent %q, want the 3-warnings notice to the user", texts)
@@ -455,6 +459,34 @@ func TestRussianPlurals(t *testing.T) {
 	}
 	if got := ruPlural(-1, "смерть", "смерти", "смертей"); got != "смерть" {
 		t.Errorf("ruPlural(-1) = %q, want %q", got, "смерть")
+	}
+}
+
+// TestFormatDuration covers the mute-time formatting of /mutetop: units are
+// declined and zero units are dropped.
+func TestFormatDuration(t *testing.T) {
+	cases := []struct {
+		seconds int64
+		want    string
+	}{
+		{0, "0 секунд"},
+		{1, "1 секунда"},
+		{45, "45 секунд"},
+		{60, "1 минута"},
+		{90, "1 минута 30 секунд"},
+		{120, "2 минуты"},
+		{3600, "1 час"},
+		{3725, "1 час 2 минуты 5 секунд"},
+		{86400, "1 день"},
+		{90061, "1 день 1 час 1 минута 1 секунда"},
+		{90000, "1 день 1 час"},
+		{172800, "2 дня"},
+		{259200, "3 дня"},
+	}
+	for _, c := range cases {
+		if got := formatDuration(c.seconds); got != c.want {
+			t.Errorf("formatDuration(%d) = %q, want %q", c.seconds, got, c.want)
+		}
 	}
 }
 

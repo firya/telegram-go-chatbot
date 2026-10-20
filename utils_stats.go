@@ -9,8 +9,14 @@ import (
 )
 
 func statsIncrease(statType int64, dayTimestamp int64, contextID int64) {
-	if DB.Exec("UPDATE stats SET count = count + 1, last_update = ? WHERE context_id = ? AND stat_type = ? AND day_timestamp = ?;", time.Now().Local().Unix(), contextID, statType, dayTimestamp).RowsAffected == 0 {
-		DB.Create(Stats{StatType: statType, DayTimestamp: dayTimestamp, ContextID: contextID, Count: 1, LastUpdate: time.Now().Local().Unix()})
+	statsAdd(statType, dayTimestamp, contextID, 1)
+}
+
+// statsAdd increases a stat counter by an arbitrary amount: mute time (stat
+// type 7) counts seconds, not events, so a single kill can add minutes.
+func statsAdd(statType int64, dayTimestamp int64, contextID int64, amount int64) {
+	if DB.Exec("UPDATE stats SET count = count + ?, last_update = ? WHERE context_id = ? AND stat_type = ? AND day_timestamp = ?;", amount, time.Now().Local().Unix(), contextID, statType, dayTimestamp).RowsAffected == 0 {
+		DB.Create(Stats{StatType: statType, DayTimestamp: dayTimestamp, ContextID: contextID, Count: amount, LastUpdate: time.Now().Local().Unix()})
 	}
 }
 

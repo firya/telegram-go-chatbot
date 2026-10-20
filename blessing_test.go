@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,24 @@ func duelistDeaths(t *testing.T, userID int64) int {
 		return 0
 	}
 	return duelist.Deaths
+}
+
+// announcedSeconds converts the first "N минут" phrase of a kill/blessing
+// message into the seconds the victim was muted for (N*60). The Russian
+// printer groups thousands with a non-breaking space ("15 360 минут"),
+// so the separators are stripped before reading the number.
+func announcedSeconds(t *testing.T, text string) int64 {
+	t.Helper()
+	text = strings.ReplaceAll(text, "\u00a0", "")
+	m := minutesRE.FindStringSubmatch(text)
+	if m == nil {
+		t.Fatalf("нет «N минут» в тексте %q", text)
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		t.Fatalf("нечитаемое число в %q: %v", m[0], err)
+	}
+	return int64(n) * 60
 }
 
 func TestBlessing(t *testing.T) {
@@ -58,6 +77,11 @@ func TestBlessing(t *testing.T) {
 	if deaths := duelistDeaths(t, 42); deaths != 1 {
 		t.Errorf("Blessing: duelist deaths = %d, want 1", deaths)
 	}
+	// The victim's mute time (stat type 7) matches the announced minutes.
+	want42 := announcedSeconds(t, texts[0])
+	if got := muteSeconds(t, 42); got != want42 {
+		t.Errorf("Blessing: mute seconds = %d, want %d", got, want42)
+	}
 
 	// Second blessing increments deaths.
 	client.Calls = nil
@@ -66,6 +90,14 @@ func TestBlessing(t *testing.T) {
 	}
 	if deaths := duelistDeaths(t, 42); deaths != 2 {
 		t.Errorf("Blessing (second): duelist deaths = %d, want 2", deaths)
+	}
+	texts = client.sentTexts()
+	if len(texts) == 0 {
+		t.Fatalf("Blessing (second): no message sent")
+	}
+	want42 += announcedSeconds(t, texts[len(texts)-1])
+	if got := muteSeconds(t, 42); got != want42 {
+		t.Errorf("Blessing (second): mute seconds = %d, want %d", got, want42)
 	}
 
 	// Premium users get the "премиально" flavor text.
@@ -78,6 +110,9 @@ func TestBlessing(t *testing.T) {
 	texts = client.sentTexts()
 	if len(texts) != 1 || !strings.Contains(texts[0], "премиально") {
 		t.Errorf("Blessing (premium) sent %q, want premium flavor text", texts)
+	}
+	if got := muteSeconds(t, 55); got != announcedSeconds(t, texts[0]) {
+		t.Errorf("Blessing (premium): mute seconds = %d, want the announced minutes", got)
 	}
 
 	// SysAdmin: the bullet ricochets onto a regular member from the stats.
@@ -105,6 +140,13 @@ func TestBlessing(t *testing.T) {
 	}
 	if deaths := duelistDeaths(t, 100); deaths != 0 {
 		t.Errorf("Blessing (sysadmin): shooter deaths = %d, want 0", deaths)
+	}
+	// The ricochet victim (1 minute) owns the mute time, not the sysadmin.
+	if got := muteSeconds(t, 777); got != 60 {
+		t.Errorf("Blessing (sysadmin): victim mute seconds = %d, want 60", got)
+	}
+	if got := muteSeconds(t, 100); got != 0 {
+		t.Errorf("Blessing (sysadmin): shooter mute seconds = %d, want 0", got)
 	}
 
 	// Burst: the 4th blessing in a row sends the suicide video instead of text.
@@ -168,6 +210,11 @@ func TestKill(t *testing.T) {
 	if deaths := duelistDeaths(t, 777); deaths != 1 {
 		t.Errorf("Kill (reply): victim deaths = %d, want 1", deaths)
 	}
+	// The victim's mute time (stat type 7) matches the announced minutes.
+	want := announcedSeconds(t, texts[0])
+	if got := muteSeconds(t, 777); got != want {
+		t.Errorf("Kill (reply): mute seconds = %d, want %d", got, want)
+	}
 
 	// Kill by argument: no message deletion.
 	client.Calls = nil
@@ -179,6 +226,14 @@ func TestKill(t *testing.T) {
 	}
 	if deaths := duelistDeaths(t, 777); deaths != 2 {
 		t.Errorf("Kill (arg): victim deaths = %d, want 2", deaths)
+	}
+	texts = client.sentTexts()
+	if len(texts) == 0 {
+		t.Fatalf("Kill (arg): no message sent")
+	}
+	want += announcedSeconds(t, texts[len(texts)-1])
+	if got := muteSeconds(t, 777); got != want {
+		t.Errorf("Kill (arg): mute seconds = %d, want %d", got, want)
 	}
 
 	// /bless variant uses the "shush" wording.
@@ -192,6 +247,10 @@ func TestKill(t *testing.T) {
 	}
 	if len(texts) == 1 {
 		assertMinutesDeclined(t, texts[0])
+		want += announcedSeconds(t, texts[0])
+		if got := muteSeconds(t, 777); got != want {
+			t.Errorf("Kill (/bless): mute seconds = %d, want %d", got, want)
+		}
 	}
 
 	// Admin targets make the bullet ricochet onto a regular member.
@@ -214,6 +273,14 @@ func TestKill(t *testing.T) {
 	if len(texts) == 1 {
 		assertMinutesDeclined(t, texts[0])
 	}
+	// The ricochet victim (1 minute) owns the mute time, not the admin target.
+	want += 60
+	if got := muteSeconds(t, 777); got != want {
+		t.Errorf("Kill (ricochet): mute seconds = %d, want %d", got, want)
+	}
+	if got := muteSeconds(t, 300); got != 0 {
+		t.Errorf("Kill (ricochet): admin target mute seconds = %d, want 0", got)
+	}
 
 	// kilo variants multiply the duration massively.
 	client.Calls = nil
@@ -227,6 +294,14 @@ func TestKill(t *testing.T) {
 	}
 	if until, ok := calls[0].Params["until_date"].(int64); !ok || time.Until(time.Unix(until, 0)) < 24*time.Hour {
 		t.Errorf("Kill (kilo): until_date = %v, want more than a day out", calls[0].Params["until_date"])
+	}
+	texts = client.sentTexts()
+	if len(texts) == 0 {
+		t.Fatalf("Kill (kilo): no message sent")
+	}
+	want += announcedSeconds(t, texts[len(texts)-1])
+	if got := muteSeconds(t, 777); got != want {
+		t.Errorf("Kill (kilo): mute seconds = %d, want %d", got, want)
 	}
 }
 
@@ -301,6 +376,13 @@ func TestShotgun(t *testing.T) {
 	}
 	if deaths := duelistDeaths(t, 777); deaths != 1 {
 		t.Errorf("Shotgun: victim 777 deaths = %d, want 1", deaths)
+	}
+	// Each victim was muted for a minute (stat type 7).
+	if got := muteSeconds(t, 777); got != 60 {
+		t.Errorf("Shotgun: victim 777 mute seconds = %d, want 60", got)
+	}
+	if got := muteSeconds(t, 778); got != 60 {
+		t.Errorf("Shotgun: victim 778 mute seconds = %d, want 60", got)
 	}
 
 	// gigabite variant uses the bite wording.

@@ -102,6 +102,8 @@ func Kill(bot *gotgbot.Bot, context *ext.Context) error {
 	if err != nil {
 		return err
 	}
+	// Mute time (stat type 7) accumulates the restriction in seconds.
+	statsAdd(7, GetStartOfDay(), ChatMember.GetUser().Id, int64(duration)*60)
 	text := prt.Sprintf("💥 %v %vпристрелил %v.\n%v отправился на респавн на %d %v.", UserFullName(context.Message.From), prependText, UserFullName(&target), UserFullName(&target), duration, ruPlural(duration, "минуту", "минуты", "минут"))
 	if command == "/bless" {
 		text = prt.Sprintf("🤫 %v %vпопросил %v помолчать %d %v.", UserFullName(context.Message.From), prependText, UserFullName(&target), duration, ruPlural(duration, "минуту", "минуты", "минут"))

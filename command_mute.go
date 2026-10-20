@@ -11,7 +11,7 @@ import (
 
 // Mute user on /mute
 func Mute(bot *gotgbot.Bot, context *ext.Context) error {
-	var untildate = time.Now().Unix() + 86400
+	var duration int64 = 86400
 	if !IsAdminOrModer(context.Message.From.Id) {
 		return Denied(bot, context)
 	}
@@ -28,12 +28,13 @@ func Mute(bot *gotgbot.Bot, context *ext.Context) error {
 	}
 	if timeArg < len(context.Args()) {
 		if addtime, parseErr := strconv.ParseInt(context.Args()[timeArg], 10, 64); parseErr == nil {
-			untildate = time.Now().Unix() + addtime
+			duration = addtime
 		}
 	}
 	if err != nil {
 		return err
 	}
+	untildate := time.Now().Unix() + duration
 	trueVal := true
 	_, err = Bot.RestrictChatMember(context.Message.Chat.Id, target.Id, gotgbot.ChatPermissions{
 		CanSendMessages:    false,
@@ -41,6 +42,10 @@ func Mute(bot *gotgbot.Bot, context *ext.Context) error {
 	}, &gotgbot.RestrictChatMemberOpts{UntilDate: untildate})
 	if err != nil {
 		return err
+	}
+	// Mute time (stat type 7) accumulates the restriction in seconds.
+	if duration > 0 {
+		statsAdd(7, GetStartOfDay(), target.Id, duration)
 	}
 	return Reply(fmt.Sprintf("Пользователь <a href=\"tg://user?id=%v\">%v</a> больше не может отправлять сообщения%v.", target.Id, UserFullName(&target), RestrictionTimeMessage(untildate)), *context)
 }

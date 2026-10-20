@@ -30,10 +30,12 @@ func Shotgun(bot *gotgbot.Bot, context *ext.Context) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	victimsCount := 0
+	// The victims are collected first and the cursor is closed before any
+	// stats row is written: the mute-time counter (statsAdd) touches the same
+	// table the cursor reads, which a live database does not like mid-scan.
+	var victims []gotgbot.User
 	for rows.Next() {
-		if victimsCount > 9 {
+		if len(victims) >= 10 {
 			break
 		}
 		rows.Scan(&userID)
@@ -42,36 +44,40 @@ func Shotgun(bot *gotgbot.Bot, context *ext.Context) error {
 			continue
 		}
 		if ricochetVictim.GetStatus() == "member" {
-			victim := ricochetVictim.GetUser()
-			var duelist Duelist
-			result := DB.Model(Duelist{}).Where(victim.Id).First(&duelist)
-			if result.RowsAffected == 0 {
-				duelist.UserID = victim.Id
-				duelist.Kills = 0
-				duelist.Deaths = 0
-			}
-			duelist.Deaths++
-			DB.Clauses(clause.OnConflict{
-				UpdateAll: true,
-			}).Create(&duelist)
-			duration := 1
-			prependText := ""
-			if victim.IsPremium {
-				duration = duration * 2
-				prependText += "премиально "
-			}
-			trueVal := true
-			_, err = Bot.RestrictChatMember(context.Message.Chat.Id, victim.Id, gotgbot.ChatPermissions{
-				CanSendMessages:    false,
-				CanReactToMessages: &trueVal,
-			}, &gotgbot.RestrictChatMemberOpts{UntilDate: time.Now().Add(time.Second * time.Duration(60*duration)).Unix()})
-			if err != nil {
-				continue
-			}
-			victimsCount++
-
-			text += fmt.Sprintf("%v %v%v.\n", UserFullName(&victim), prependText, GetBless())
+			victims = append(victims, ricochetVictim.GetUser())
 		}
+	}
+	rows.Close()
+	for _, victim := range victims {
+		var duelist Duelist
+		result := DB.Model(Duelist{}).Where(victim.Id).First(&duelist)
+		if result.RowsAffected == 0 {
+			duelist.UserID = victim.Id
+			duelist.Kills = 0
+			duelist.Deaths = 0
+		}
+		duelist.Deaths++
+		DB.Clauses(clause.OnConflict{
+			UpdateAll: true,
+		}).Create(&duelist)
+		duration := 1
+		prependText := ""
+		if victim.IsPremium {
+			duration = duration * 2
+			prependText += "премиально "
+		}
+		trueVal := true
+		_, err = Bot.RestrictChatMember(context.Message.Chat.Id, victim.Id, gotgbot.ChatPermissions{
+			CanSendMessages:    false,
+			CanReactToMessages: &trueVal,
+		}, &gotgbot.RestrictChatMemberOpts{UntilDate: time.Now().Add(time.Second * time.Duration(60*duration)).Unix()})
+		if err != nil {
+			continue
+		}
+		// Mute time (stat type 7) accumulates the restriction in seconds.
+		statsAdd(7, GetStartOfDay(), victim.Id, int64(duration)*60)
+
+		text += fmt.Sprintf("%v %v%v.\n", UserFullName(&victim), prependText, GetBless())
 	}
 	text += "\nРеспавн через пару минут."
 	_, err = context.EffectiveChat.SendMessage(bot, text, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML, DisableNotification: true})

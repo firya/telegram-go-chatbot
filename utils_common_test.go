@@ -819,6 +819,18 @@ func TestStatsCounters(t *testing.T) {
 		t.Errorf("statsIncrease: Count = %v, want the first context to stay at 3", row.Count)
 	}
 
+	// statsAdd increases the counter by an arbitrary amount: mute time (stat
+	// type 7) counts seconds, so one call can add minutes at once.
+	statsAdd(7, day, 42, 600)
+	statsAdd(7, day, 42, 60)
+	row = Stats{}
+	if err := DB.Where("stat_type = ? AND day_timestamp = ? AND context_id = ?", 7, day, 42).First(&row).Error; err != nil {
+		t.Fatalf("statsAdd: %v", err)
+	}
+	if row.Count != 660 {
+		t.Errorf("statsAdd: Count = %v, want 660", row.Count)
+	}
+
 	// Words are stored once per stem, and the stem of the same word is stable.
 	first := getWordID("покупал")
 	again := getWordID("покупал")

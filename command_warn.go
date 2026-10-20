@@ -66,6 +66,8 @@ func WarnUser(bot *gotgbot.Bot, context *ext.Context) error {
 			return err
 		}
 		if result {
+			// Mute time (stat type 7) accumulates the restriction in seconds.
+			statsAdd(7, GetStartOfDay(), target.Id, 168*3600)
 			return Reply(fmt.Sprintf("Пользователь <a href=\"tg://user?id=%v\">%v</a> замьючен, т.к. набрал 3 предупреждения.", target.Id, UserFullName(&target)), *context)
 		}
 	}
