@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 90 commands registered in `main.go` (some of them are aliases of the same function)
-- 93 `.go` source files, 154 tests in 23 files
+- 93 `.go` source files, 158 tests in 24 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -32,9 +32,10 @@ Access to moderation commands comes from the `ZAVTRA_ADMINS` / `ZAVTRA_MODERS` /
 |---|---|
 | `/duel`, `/russianroulette` | challenge somebody to a duel (Russian roulette), accept/deny buttons |
 | `/duelstats` | your own duel statistics |
-| `/kill` and aliases `bite`, `kilobite`, `kilomlem`, `megabite`, `megamlem`, `bless` | "shoot" a user (temporary restriction) |
+| `/kill` and aliases `bite`, `kilobite`, `kilomlem`, `megabite`, `bless` | "shoot" a user (temporary restriction) |
 | `/revive`, `/resurrect`, `/redemption`, `/massrevive`, `/megarevive` | revive one user / all recent ones |
 | `/shotgun`, `gigabite`, `gigakill`, `ultrakill` | shoot the whole chat |
+| `/megamlem` | the same permissions and restrictions as `/shotgun`, with a giant black cat picture |
 | `/isekai`, `suicide`, `blessing`, `/isekaitop`, `/blessingtop` | "get hired by Roskomnadzor" and the chat leaderboard |
 | `/addbless`, `/addnope` | add a blessing reason / a text shown when the duel button is declined |
 | `/pidor`, `/pidoreg`, `/pidorlist`, `/pidorme`, `/pidorstats`, `/pidorall`, `/pidorules`, `/pidordel`, `/pidorremovetoday` | the "Pidor of the Day!" game |
@@ -154,7 +155,7 @@ CI (`.github/workflows/`):
 ## Tests
 
 ```bash
-go test -race -count=1 ./...                                   # 154 tests, ~25–45 s
+go test -race -count=1 ./...                                   # 158 tests
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # check datacenter access
 ```
 
@@ -218,7 +219,7 @@ utils_startup.go     the startup notice: build, host, connection, database, chat
 utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll
 utils_http.go        HTTP client with proxy and timeout, DownloadFile
 utils_forward.go     forwarding channel posts
-utils_files.go       go:embed of the sticker images (assets/*.png)
+utils_files.go       go:embed of stickers and the /megamlem image (assets/*.png, assets/megamlem.jpg)
 utils_plural.go      Russian numerals (ruPlural)
 media.go             the media of a message: its type, its file, where it is on disk
 media_ffmpeg.go      FFmpegConvert — the conversion for /convert, /distort, /invert, /loop
@@ -228,7 +229,7 @@ pidor_*.go           the "Pidor of the Day!" game
 bets_*.go            bets
 ai_*.go              AI module (disabled)
 *_test.go            tests + harness
-assets/              sticker PNGs (go:embed) and CREDITS.md about their licensing
+assets/              stickers, the /megamlem image (go:embed), and CREDITS.md
 ```
 
 ## MTProto client

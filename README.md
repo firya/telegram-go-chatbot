@@ -7,7 +7,7 @@ Telegram-бот для одного конкретного чата на Go. Р�
 команд. Состояние — в PostgreSQL.
 
 - 90 команд, зарегистрированных в `main.go` (часть — алиасы одной функции)
-- 93 исходника `.go`, 154 теста в 23 файлах
+- 93 исходника `.go`, 158 тестов в 24 файлах
 - GitHub Actions: сборка + деплой на self-hosted раннере и публикация образа в `ghcr.io`
 - Лицензия — MIT
 - С 16.10.2026 разработку ведёт ИИ — модели локального стека Strata (`swift-1.5-iq3_xxs`,
@@ -32,9 +32,10 @@ Telegram-бот для одного конкретного чата на Go. Р�
 |---|---|
 | `/duel`, `/russianroulette` | вызов на дуэль (русская рулетка), кнопки принятия/отказа |
 | `/duelstats` | своя статистика дуэлей |
-| `/kill` и алиасы `bite`, `kilobite`, `kilomlem`, `megabite`, `megamlem`, `bless` | «пристрелить» юзера (временное ограничение) |
+| `/kill` и алиасы `bite`, `kilobite`, `kilomlem`, `megabite`, `bless` | «пристрелить» юзера (временное ограничение) |
 | `/revive`, `/resurrect`, `/redemption`, `/massrevive`, `/megarevive` | возродить одного / всех недавних |
 | `/shotgun`, `gigabite`, `gigakill`, `ultrakill` | выстрел по чату |
+| `/megamlem` | те же права и ограничения участников, что у `/shotgun`, с картинкой гигантского чёрного кота |
 | `/isekai`, `suicide`, `blessing`, `/isekaitop`, `/blessingtop` | «устроиться в роскомнадзор» и топ чата |
 | `/addbless`, `/addnope` | добавить причину блесса / текст отказа по кнопке |
 | `/pidor`, `/pidoreg`, `/pidorlist`, `/pidorme`, `/pidorstats`, `/pidorall`, `/pidorules`, `/pidordel`, `/pidorremovetoday` | игра «Пидор Дня!» |
@@ -153,7 +154,7 @@ CI (`.github/workflows/`):
 ## Тесты
 
 ```bash
-go test -race -count=1 ./...                                   # 154 теста, ~25–45 с
+go test -race -count=1 ./...                                   # 158 тестов
 PROTO_PROBE=1 go test -count=1 -run TestMtprotoConnectProbe -v .   # проверить доступ к датацентрам
 ```
 
@@ -216,7 +217,7 @@ utils_startup.go     отчёт о старте: сборка, хост, сое�
 utils_common.go      RandInt, StringInSlice, MarshalOmitEmptyAll
 utils_http.go        HTTP-клиент с прокси и таймаутом, DownloadFile
 utils_forward.go     пересылка постов канала
-utils_files.go       go:embed стикеров (assets/*.png)
+utils_files.go       go:embed стикеров и картинки /megamlem (assets/*.png, assets/megamlem.jpg)
 utils_plural.go      русские числительные (ruPlural)
 media.go             медиа сообщения: тип, файл, где он лежит на диске
 media_ffmpeg.go      FFmpegConvert — конвертация для /convert, /distort, /invert, /loop
@@ -226,7 +227,7 @@ pidor_*.go           игра «Пидор Дня!»
 bets_*.go            ставки
 ai_*.go              AI-модуль (выключен)
 *_test.go            тесты + harness
-assets/              PNG стикеров (go:embed) и CREDITS.md про их лицензии
+assets/              стикеры, картинка /megamlem (go:embed) и CREDITS.md
 ```
 
 ## MTProto-клиент

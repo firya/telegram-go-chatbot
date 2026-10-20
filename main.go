@@ -105,7 +105,7 @@ func commandListConfig() []commandList {
 		{gotgbot.BotCommand{Command: "kilobite", Description: "сильно укусить кого-нибудь", IsEphemeral: true}, Kill},
 		{gotgbot.BotCommand{Command: "kilomlem", Description: "сильно укусить кого-нибудь", IsEphemeral: true}, Kill},
 		{gotgbot.BotCommand{Command: "megabite", Description: "очень сильно укусить кого-нибудь", IsEphemeral: true}, Kill},
-		{gotgbot.BotCommand{Command: "megamlem", Description: "очень сильно укусить кого-нибудь", IsEphemeral: true}, Kill},
+		{gotgbot.BotCommand{Command: "megamlem", Description: "совершить МЕГАМЛЕМ по чату", IsEphemeral: true}, Shotgun},
 		{gotgbot.BotCommand{Command: "kill", Description: "пристрелить кого-нибудь", IsEphemeral: true}, Kill},
 		{gotgbot.BotCommand{Command: "mute", Description: "заглушить кого-нибудь", IsEphemeral: true}, Mute},
 		{gotgbot.BotCommand{Command: "pidordel", Description: "удалить игрока из \"Пидор Дня!\"", IsEphemeral: true}, Pidordel},

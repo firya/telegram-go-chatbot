@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -11,7 +13,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Kill users on /shotgun, /gigakill /gigabite
+// Kill users on /shotgun and its variants, including /megamlem.
 func Shotgun(bot *gotgbot.Bot, context *ext.Context) error {
 	if !IsAdminOrModer(context.EffectiveUser.Id) {
 		return Denied(bot, context)
@@ -20,11 +22,16 @@ func Shotgun(bot *gotgbot.Bot, context *ext.Context) error {
 	Remove(bot, context)
 
 	var userID int64
+	command := strings.Split(context.Args()[0], "@")[0]
+	isMegamlem := command == "/megamlem"
+	header := ""
 	text := ""
-	if strings.Contains(context.Args()[0], "gigabite") {
-		text += fmt.Sprintf("😼 %v сделал кусь чату!\n\n", MentionUser(context.EffectiveUser))
+	if isMegamlem {
+		header = "Неизвестно откуда появившийся гигантский чёрный кот совершает <b>МЕГАМЛЕМ!</b>\n\n"
+	} else if strings.Contains(context.Args()[0], "gigabite") {
+		header = fmt.Sprintf("😼 %v сделал кусь чату!\n\n", MentionUser(context.EffectiveUser))
 	} else {
-		text += fmt.Sprintf("💥 %v выстрелил по чату из шотгана!\n\n", MentionUser(context.EffectiveUser))
+		header = fmt.Sprintf("💥 %v выстрелил по чату из шотгана!\n\n", MentionUser(context.EffectiveUser))
 	}
 	rows, err := DB.Model(&Stats{}).Select("context_id").Where("stat_type = 3").Order("last_update desc").Limit(1000).Rows()
 	if err != nil {
@@ -83,6 +90,24 @@ func Shotgun(bot *gotgbot.Bot, context *ext.Context) error {
 		text += fmt.Sprintf("%v %v%v.\n", UserFullName(&victim), prependText, GetBless())
 	}
 	text += "\nРеспавн через пару минут."
+	if isMegamlem {
+		caption := header + text
+		// Long names or blessing texts may exceed Telegram's photo caption limit.
+		// Count UTF-16 units including markup conservatively, and keep the full
+		// result in a separate message when it does not fit under the picture.
+		separateResult := len(utf16.Encode([]rune(caption))) > 1024
+		if separateResult {
+			caption = strings.TrimSpace(header)
+		}
+		_, err = bot.SendPhoto(context.Message.Chat.Id, gotgbot.InputFileByReader("megamlem.jpg", bytes.NewReader(megamlemJPG)), &gotgbot.SendPhotoOpts{
+			Caption: caption, ParseMode: gotgbot.ParseModeHTML, DisableNotification: true,
+		})
+		if err != nil || !separateResult {
+			return err
+		}
+	} else {
+		text = header + text
+	}
 	_, err = context.EffectiveChat.SendMessage(bot, text, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML, DisableNotification: true})
 	return err
 }
