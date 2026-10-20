@@ -12,7 +12,7 @@ import (
 )
 
 func Reply(message string, context ext.Context) error {
-	_, err := Bot.SendMessage(context.Message.Chat.Id, message, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML, ReceiverUserId: context.EffectiveUser.Id, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId, AllowSendingWithoutReply: true}})
+	_, err := Bot.SendMessage(context.Message.Chat.Id, message, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML, EphemeralMessageParameters: &gotgbot.EphemeralMessageParameters{ReceiverUserId: context.EffectiveUser.Id}, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId, AllowSendingWithoutReply: true}})
 	if err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func SysAdminReply(message string) error {
 	if chatId == 0 {
 		chatId = Config.SysAdmin
 	} else {
-		opts.ReceiverUserId = Config.SysAdmin
+		opts.EphemeralMessageParameters = &gotgbot.EphemeralMessageParameters{ReceiverUserId: Config.SysAdmin}
 	}
 
 	_, err := Bot.SendMessage(chatId, message, opts)
@@ -43,7 +43,7 @@ func SysAdminReply(message string) error {
 
 func ReplyAndRemove(message string, context ext.Context) error {
 	message += "\n\nЭто сообщение самоуничтожится через 30 секунд."
-	sentMessage, err := Bot.SendMessage(context.Message.Chat.Id, message, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML, ReceiverUserId: context.EffectiveUser.Id, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId, AllowSendingWithoutReply: true}})
+	sentMessage, err := Bot.SendMessage(context.Message.Chat.Id, message, &gotgbot.SendMessageOpts{ParseMode: gotgbot.ParseModeHTML, EphemeralMessageParameters: &gotgbot.EphemeralMessageParameters{ReceiverUserId: context.EffectiveUser.Id}, ReplyParameters: &gotgbot.ReplyParameters{MessageId: context.Message.MessageId, AllowSendingWithoutReply: true}})
 	if err != nil {
 		return err
 	}

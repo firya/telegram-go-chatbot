@@ -330,8 +330,9 @@ func TestGlobalMiddlewareAntispam(t *testing.T) {
 	if calls[0].Params["chat_id"] != int64(Config.Chat) {
 		t.Errorf("spam report chat_id = %v, want the main chat %d", calls[0].Params["chat_id"], Config.Chat)
 	}
-	if calls[0].Params["receiver_user_id"] != int64(Config.SysAdmin) {
-		t.Errorf("spam report receiver_user_id = %v, want the sysadmin %d", calls[0].Params["receiver_user_id"], Config.SysAdmin)
+	eph, ok := calls[0].Params["ephemeral_message_parameters"].(*gotgbot.EphemeralMessageParameters)
+	if !ok || eph.ReceiverUserId != int64(Config.SysAdmin) {
+		t.Errorf("spam report ephemeral_message_parameters = %v, want the sysadmin %d", calls[0].Params["ephemeral_message_parameters"], Config.SysAdmin)
 	}
 	text, _ := calls[0].Params["text"].(string)
 	if !strings.Contains(text, "Возможно спам") || !strings.Contains(text, "привет") {
@@ -398,8 +399,9 @@ func TestErrorReporting(t *testing.T) {
 	if calls[0].Params["chat_id"] != int64(Config.Chat) {
 		t.Errorf("ErrorReporting chat_id = %v, want the main chat %d", calls[0].Params["chat_id"], Config.Chat)
 	}
-	if calls[0].Params["receiver_user_id"] != int64(Config.SysAdmin) {
-		t.Errorf("ErrorReporting receiver_user_id = %v, want the sysadmin %d", calls[0].Params["receiver_user_id"], Config.SysAdmin)
+	eph, ok := calls[0].Params["ephemeral_message_parameters"].(*gotgbot.EphemeralMessageParameters)
+	if !ok || eph.ReceiverUserId != int64(Config.SysAdmin) {
+		t.Errorf("ErrorReporting ephemeral_message_parameters = %v, want the sysadmin %d", calls[0].Params["ephemeral_message_parameters"], Config.SysAdmin)
 	}
 	text, _ := calls[0].Params["text"].(string)
 	if strings.Contains(text, "TESTTOKEN") {
@@ -620,7 +622,7 @@ func TestBotInit(t *testing.T) {
 	if !strings.Contains(report.body, "name=\"chat_id\"\r\n\r\n-100\r\n") {
 		t.Errorf("BotInit startup report = %q, want it addressed to the main chat %d", report.body, Config.Chat)
 	}
-	if !strings.Contains(report.body, "name=\"receiver_user_id\"\r\n\r\n7\r\n") {
+	if !strings.Contains(report.body, "name=\"ephemeral_message_parameters\"\r\n\r\n{\"receiver_user_id\":7}\r\n") {
 		t.Errorf("BotInit startup report = %q, want it addressed to the sysadmin 7", report.body)
 	}
 	if !strings.Contains(report.body, "Connection: polling") {

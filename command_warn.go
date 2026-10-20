@@ -42,20 +42,20 @@ func WarnUser(bot *gotgbot.Bot, context *ext.Context) error {
 		return result.Error
 	}
 	if warn.Amount == 1 {
-		if _, err := context.EffectiveChat.SendMessage(bot, fmt.Sprintf("%v, у тебя 1 предупреждение.\nЕсли получишь 3 предупреждения за 2 недели, то будешь замьючен.", UserFullName(&target)), &gotgbot.SendMessageOpts{ReceiverUserId: target.Id, ParseMode: gotgbot.ParseModeHTML}); err != nil {
+		if _, err := context.EffectiveChat.SendMessage(bot, fmt.Sprintf("%v, у тебя 1 предупреждение.\nЕсли получишь 3 предупреждения за 2 недели, то будешь замьючен.", UserFullName(&target)), &gotgbot.SendMessageOpts{EphemeralMessageParameters: &gotgbot.EphemeralMessageParameters{ReceiverUserId: target.Id}, ParseMode: gotgbot.ParseModeHTML}); err != nil {
 			log.Printf("warn: failed to notify %v about the warning: %v", target.Id, err)
 		}
 		return Reply(fmt.Sprintf("%v получил предупреждение. Сейчас у него 1 из 3.", UserFullName(&target)), *context)
 	}
 	if warn.Amount == 2 {
-		if _, err := context.EffectiveChat.SendMessage(bot, (fmt.Sprintf("%v, у тебя 2 предупреждения.\nЕсли в течение недели получишь ещё одно, то будешь замьючен.", UserFullName(&target))), &gotgbot.SendMessageOpts{ReceiverUserId: target.Id, ParseMode: gotgbot.ParseModeHTML}); err != nil {
+		if _, err := context.EffectiveChat.SendMessage(bot, (fmt.Sprintf("%v, у тебя 2 предупреждения.\nЕсли в течение недели получишь ещё одно, то будешь замьючен.", UserFullName(&target))), &gotgbot.SendMessageOpts{EphemeralMessageParameters: &gotgbot.EphemeralMessageParameters{ReceiverUserId: target.Id}, ParseMode: gotgbot.ParseModeHTML}); err != nil {
 			log.Printf("warn: failed to notify %v about the warning: %v", target.Id, err)
 		}
 		return Reply(fmt.Sprintf("%v получил предупреждение. Сейчас у него 2 из 3.", UserFullName(&target)), *context)
 	}
 	if warn.Amount == 3 {
 		trueVal := true
-		if _, err := context.EffectiveChat.SendMessage(bot, fmt.Sprintf("%v, ты набрал 3 предупреждения.", UserFullName(&target)), &gotgbot.SendMessageOpts{ReceiverUserId: target.Id, ParseMode: gotgbot.ParseModeHTML}); err != nil {
+		if _, err := context.EffectiveChat.SendMessage(bot, fmt.Sprintf("%v, ты набрал 3 предупреждения.", UserFullName(&target)), &gotgbot.SendMessageOpts{EphemeralMessageParameters: &gotgbot.EphemeralMessageParameters{ReceiverUserId: target.Id}, ParseMode: gotgbot.ParseModeHTML}); err != nil {
 			log.Printf("warn: failed to notify %v about the mute: %v", target.Id, err)
 		}
 		result, err := Bot.RestrictChatMember(context.Message.Chat.Id, target.Id, gotgbot.ChatPermissions{

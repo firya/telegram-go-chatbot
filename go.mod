@@ -5,10 +5,10 @@ go 1.26.0
 require (
 	github.com/Jeffail/tunny v0.1.4
 	github.com/NexonSU/go-ytdlp v0.0.0-20260129133802-632315d9ba56
-	github.com/PaulSonOfLars/gotgbot/v2 v2.0.0-rc.36
-	github.com/arran4/golang-ical v0.3.7
+	github.com/PaulSonOfLars/gotgbot/v2 v2.0.0-rc.37
+	github.com/arran4/golang-ical v0.3.8
 	github.com/celestix/gotgproto v1.0.0-beta22.0.20260717065349-0ea177af28e8
-	github.com/cloudwego/eino v0.9.21
+	github.com/cloudwego/eino v0.9.22
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.13
 	github.com/eekstunt/telegramify-markdown-go v0.2.0
 	github.com/fogleman/gg v1.3.0
@@ -84,7 +84,7 @@ require (
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
-	github.com/shopspring/decimal v1.5.0 // indirect
+	github.com/shopspring/decimal v1.6.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/slongfield/pyfmt v0.0.0-20220222012616-ea85ff4c361f // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect

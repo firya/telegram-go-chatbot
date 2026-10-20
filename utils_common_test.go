@@ -720,8 +720,9 @@ func TestSysAdminReply(t *testing.T) {
 	if calls[0].Params["chat_id"] != int64(Config.Chat) {
 		t.Errorf("SysAdminReply chat_id = %v, want the main chat %d", calls[0].Params["chat_id"], Config.Chat)
 	}
-	if calls[0].Params["receiver_user_id"] != int64(Config.SysAdmin) {
-		t.Errorf("SysAdminReply receiver_user_id = %v, want the sysadmin %d", calls[0].Params["receiver_user_id"], Config.SysAdmin)
+	eph, ok := calls[0].Params["ephemeral_message_parameters"].(*gotgbot.EphemeralMessageParameters)
+	if !ok || eph.ReceiverUserId != int64(Config.SysAdmin) {
+		t.Errorf("SysAdminReply ephemeral_message_parameters = %v, want the sysadmin %d", calls[0].Params["ephemeral_message_parameters"], Config.SysAdmin)
 	}
 	if texts := client.sentTexts(); len(texts) != 1 || texts[0] != "готово" {
 		t.Errorf("SysAdminReply sent %q, want the text unchanged", texts)
@@ -741,8 +742,8 @@ func TestSysAdminReply(t *testing.T) {
 	if calls[0].Params["chat_id"] != int64(Config.SysAdmin) {
 		t.Errorf("SysAdminReply (no main chat) chat_id = %v, want the sysadmin %d", calls[0].Params["chat_id"], Config.SysAdmin)
 	}
-	if _, ok := calls[0].Params["receiver_user_id"]; ok {
-		t.Errorf("SysAdminReply (no main chat) sent receiver_user_id, want a plain private message")
+	if _, ok := calls[0].Params["ephemeral_message_parameters"]; ok {
+		t.Errorf("SysAdminReply (no main chat) sent ephemeral_message_parameters, want a plain private message")
 	}
 
 	// A chat that refuses the message answers with the API error: the caller
