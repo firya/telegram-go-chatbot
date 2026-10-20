@@ -77,6 +77,9 @@ func TestBlessing(t *testing.T) {
 	if deaths := duelistDeaths(t, 42); deaths != 1 {
 		t.Errorf("Blessing: duelist deaths = %d, want 1", deaths)
 	}
+	if got := statTotal(t, 8, 42); got != 1 {
+		t.Errorf("Blessing: death stats = %d, want 1", got)
+	}
 	// The victim's mute time (stat type 7) matches the announced minutes.
 	want42 := announcedSeconds(t, texts[0])
 	if got := muteSeconds(t, 42); got != want42 {
@@ -90,6 +93,9 @@ func TestBlessing(t *testing.T) {
 	}
 	if deaths := duelistDeaths(t, 42); deaths != 2 {
 		t.Errorf("Blessing (second): duelist deaths = %d, want 2", deaths)
+	}
+	if got := statTotal(t, 8, 42); got != 2 {
+		t.Errorf("Blessing (second): death stats = %d, want 2", got)
 	}
 	texts = client.sentTexts()
 	if len(texts) == 0 {
@@ -113,6 +119,9 @@ func TestBlessing(t *testing.T) {
 	}
 	if got := muteSeconds(t, 55); got != announcedSeconds(t, texts[0]) {
 		t.Errorf("Blessing (premium): mute seconds = %d, want the announced minutes", got)
+	}
+	if got := statTotal(t, 8, 55); got != 1 {
+		t.Errorf("Blessing (premium): death stats = %d, want 1", got)
 	}
 
 	// SysAdmin: the bullet ricochets onto a regular member from the stats.
@@ -147,6 +156,12 @@ func TestBlessing(t *testing.T) {
 	}
 	if got := muteSeconds(t, 100); got != 0 {
 		t.Errorf("Blessing (sysadmin): shooter mute seconds = %d, want 0", got)
+	}
+	if got := statTotal(t, 8, 777); got != 1 {
+		t.Errorf("Blessing (sysadmin): victim death stats = %d, want 1", got)
+	}
+	if got := statTotal(t, 8, 100); got != 0 {
+		t.Errorf("Blessing (sysadmin): shooter death stats = %d, want 0", got)
 	}
 
 	// Burst: the 4th blessing in a row sends the suicide video instead of text.
@@ -210,6 +225,10 @@ func TestKill(t *testing.T) {
 	if deaths := duelistDeaths(t, 777); deaths != 1 {
 		t.Errorf("Kill (reply): victim deaths = %d, want 1", deaths)
 	}
+	// Deaths are duplicated into the stats (stat type 8) for the /stats tops.
+	if got := statTotal(t, 8, 777); got != 1 {
+		t.Errorf("Kill (reply): death stats = %d, want 1", got)
+	}
 	// The victim's mute time (stat type 7) matches the announced minutes.
 	want := announcedSeconds(t, texts[0])
 	if got := muteSeconds(t, 777); got != want {
@@ -226,6 +245,9 @@ func TestKill(t *testing.T) {
 	}
 	if deaths := duelistDeaths(t, 777); deaths != 2 {
 		t.Errorf("Kill (arg): victim deaths = %d, want 2", deaths)
+	}
+	if got := statTotal(t, 8, 777); got != 2 {
+		t.Errorf("Kill (arg): death stats = %d, want 2", got)
 	}
 	texts = client.sentTexts()
 	if len(texts) == 0 {
@@ -251,6 +273,9 @@ func TestKill(t *testing.T) {
 		if got := muteSeconds(t, 777); got != want {
 			t.Errorf("Kill (/bless): mute seconds = %d, want %d", got, want)
 		}
+	}
+	if got := statTotal(t, 8, 777); got != 3 {
+		t.Errorf("Kill (/bless): death stats = %d, want 3", got)
 	}
 
 	// Admin targets make the bullet ricochet onto a regular member.
@@ -281,6 +306,13 @@ func TestKill(t *testing.T) {
 	if got := muteSeconds(t, 300); got != 0 {
 		t.Errorf("Kill (ricochet): admin target mute seconds = %d, want 0", got)
 	}
+	// The ricochet death belongs to the victim, not to the admin target.
+	if got := statTotal(t, 8, 777); got != 4 {
+		t.Errorf("Kill (ricochet): victim death stats = %d, want 4", got)
+	}
+	if got := statTotal(t, 8, 300); got != 0 {
+		t.Errorf("Kill (ricochet): admin target death stats = %d, want 0", got)
+	}
 
 	// kilo variants multiply the duration massively.
 	client.Calls = nil
@@ -302,6 +334,9 @@ func TestKill(t *testing.T) {
 	want += announcedSeconds(t, texts[len(texts)-1])
 	if got := muteSeconds(t, 777); got != want {
 		t.Errorf("Kill (kilo): mute seconds = %d, want %d", got, want)
+	}
+	if got := statTotal(t, 8, 777); got != 5 {
+		t.Errorf("Kill (kilo): death stats = %d, want 5", got)
 	}
 }
 
@@ -383,6 +418,12 @@ func TestShotgun(t *testing.T) {
 	}
 	if got := muteSeconds(t, 778); got != 60 {
 		t.Errorf("Shotgun: victim 778 mute seconds = %d, want 60", got)
+	}
+	if got := statTotal(t, 8, 777); got != 1 {
+		t.Errorf("Shotgun: victim 777 death stats = %d, want 1", got)
+	}
+	if got := statTotal(t, 8, 778); got != 1 {
+		t.Errorf("Shotgun: victim 778 death stats = %d, want 1", got)
 	}
 
 	// gigabite variant uses the bite wording.

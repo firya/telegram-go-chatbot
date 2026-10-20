@@ -141,6 +141,9 @@ func Accept(bot *gotgbot.Bot, context *ext.Context) error {
 		if result.Error != nil {
 			return result.Error
 		}
+		// Deaths are duplicated into the stats (stat type 8) so /stats tops
+		// can rank them per day.
+		statsAdd(8, GetStartOfDay(), player.Id, 1)
 		trueVal := true
 		_, err = Bot.RestrictChatMember(context.EffectiveChat.Id, PlayerChatMember.GetUser().Id, gotgbot.ChatPermissions{
 			CanSendMessages:    false,
@@ -190,6 +193,9 @@ func Accept(bot *gotgbot.Bot, context *ext.Context) error {
 	if result.Error != nil {
 		return result.Error
 	}
+	// Deaths are duplicated into the stats (stat type 8) so /stats tops can
+	// rank them per day.
+	statsAdd(8, GetStartOfDay(), victim.Id, 1)
 	if player.IsBot {
 		VictimDuelist.Deaths = 1
 	}

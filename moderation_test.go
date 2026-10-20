@@ -184,46 +184,6 @@ func TestMute(t *testing.T) {
 	}
 }
 
-func TestMuteTop(t *testing.T) {
-	bot, client := setupTestEnv(t)
-
-	// Empty top.
-	if err := MuteTop(bot, testContext(bot, "/mutetop", testUser(42))); err != nil {
-		t.Fatalf("MuteTop (empty): %v", err)
-	}
-	texts := client.sentTexts()
-	if len(texts) != 1 || texts[0] != "Топ-10 времени, проведённого в муте:\n\n" {
-		t.Errorf("MuteTop (empty) sent %q, want empty top", texts)
-	}
-
-	// Ranked users; known users are shown by name, unknown by id. The seconds
-	// of several days are summed, and the durations are spelled out declined.
-	client.Calls = nil
-	seedUser(42, "test42", "Тест")
-	DB.Create(&Stats{ContextID: 42, StatType: 7, DayTimestamp: 1, Count: 86400})
-	DB.Create(&Stats{ContextID: 42, StatType: 7, DayTimestamp: 2, Count: 7200})
-	DB.Create(&Stats{ContextID: 777, StatType: 7, DayTimestamp: 1, Count: 90})
-	if err := MuteTop(bot, testContext(bot, "/mutetop", testUser(42))); err != nil {
-		t.Fatalf("MuteTop: %v", err)
-	}
-	texts = client.sentTexts()
-	if len(texts) != 1 ||
-		!strings.Contains(texts[0], "1. Тест - 1 день 2 часа") ||
-		!strings.Contains(texts[0], "2. 777 - 1 минута 30 секунд") {
-		t.Errorf("MuteTop sent %q, want ranked top with formatted durations", texts)
-	}
-
-	// Other stat types do not leak into the top.
-	client.Calls = nil
-	DB.Create(&Stats{ContextID: 500, StatType: 3, DayTimestamp: 1, Count: 100000})
-	if err := MuteTop(bot, testContext(bot, "/mutetop", testUser(42))); err != nil {
-		t.Fatalf("MuteTop (other types): %v", err)
-	}
-	if texts := client.sentTexts(); len(texts) != 1 || strings.Contains(texts[0], "500") {
-		t.Errorf("MuteTop (other types) sent %q, want the message counter excluded", texts)
-	}
-}
-
 func TestUnban(t *testing.T) {
 	bot, client := setupTestEnv(t)
 

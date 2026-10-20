@@ -69,6 +69,9 @@ func Blessing(bot *gotgbot.Bot, context *ext.Context) error {
 	if result.Error != nil {
 		return result.Error
 	}
+	// Deaths are duplicated into the stats (stat type 8) so /stats tops can
+	// rank them per day.
+	statsAdd(8, GetStartOfDay(), victim.Id, 1)
 	duration := RandInt(1, duelist.Deaths+1)
 	duration += 10
 	prependText := ""

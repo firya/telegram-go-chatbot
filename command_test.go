@@ -71,6 +71,137 @@ func TestStatsLinks(t *testing.T) {
 	}
 }
 
+func TestStatsTop(t *testing.T) {
+	bot, client := setupTestEnv(t)
+
+	// No argument -> dashboard links plus the list of tops.
+	if err := StatsTop(bot, testContext(bot, "/stats", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (no args): %v", err)
+	}
+	texts := client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "grafana") || !strings.Contains(texts[0], "/stats likes") {
+		t.Errorf("StatsTop (no args) sent %q, want links and usage", texts)
+	}
+
+	// Unknown top and unknown period.
+	client.Calls = nil
+	if err := StatsTop(bot, testContext(bot, "/stats bogus", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (bogus): %v", err)
+	}
+	if texts := client.sentTexts(); len(texts) != 1 || !strings.Contains(texts[0], "Непонятный топ") {
+		t.Errorf("StatsTop (bogus) sent %q, want unknown top message", texts)
+	}
+	client.Calls = nil
+	if err := StatsTop(bot, testContext(bot, "/stats likes month", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (month): %v", err)
+	}
+	if texts := client.sentTexts(); len(texts) != 1 || !strings.Contains(texts[0], "Непонятный период") {
+		t.Errorf("StatsTop (month) sent %q, want unknown period message", texts)
+	}
+
+	// Seed one row per top: likes are per message, deaths/mute time/messages
+	// per user, words per dictionary id.
+	client.Calls = nil
+	seedUser(42, "test42", "Тест")
+	DB.Create(&Stats{ContextID: 1001, StatType: 6, DayTimestamp: 1, Count: 5})
+	DB.Create(&Stats{ContextID: 1002, StatType: 6, DayTimestamp: 1, Count: 12})
+	DB.Create(&Stats{ContextID: 42, StatType: 8, DayTimestamp: 1, Count: 3})
+	DB.Create(&Stats{ContextID: 777, StatType: 8, DayTimestamp: 1, Count: 1})
+	DB.Create(&Stats{ContextID: 42, StatType: 7, DayTimestamp: 1, Count: 90})
+	DB.Create(&Stats{ContextID: 42, StatType: 3, DayTimestamp: 1, Count: 125})
+	DB.Create(&StatsWords{ID: 1, Word: "бляха", ShortWord: "бляха"})
+	DB.Create(&Stats{ContextID: 1, StatType: 4, DayTimestamp: 1, Count: 10})
+	DB.Create(&StatsWords{ID: 2, Word: "сука", ShortWord: "сука"})
+	DB.Create(&Stats{ContextID: 2, StatType: 4, DayTimestamp: 1, Count: 5})
+
+	// Likes rank the messages themselves, most liked first, with a link.
+	if err := StatsTop(bot, testContext(bot, "/stats likes", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (likes): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 ||
+		!strings.Contains(texts[0], "Топ-10 по лайкам за всё время") ||
+		strings.Index(texts[0], "1002") > strings.Index(texts[0], "1001") ||
+		!strings.Contains(texts[0], "12 лайков") {
+		t.Errorf("StatsTop (likes) sent %q, want ranked message links", texts)
+	}
+
+	// Deaths top: known users by name, unknown by id, declined counts; the
+	// blessings alias titles the top "по блесингам".
+	client.Calls = nil
+	if err := StatsTop(bot, testContext(bot, "/stats blessings", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (blessings): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 ||
+		!strings.Contains(texts[0], "Топ-10 по блесингам за всё время") ||
+		!strings.Contains(texts[0], "1. Тест - 3 смерти") ||
+		!strings.Contains(texts[0], "2. 777 - 1 смерть") {
+		t.Errorf("StatsTop (blessings) sent %q, want ranked deaths", texts)
+	}
+
+	// Mute time top spells the durations out; the blesstime alias titles the
+	// top "по времени в блесинге".
+	client.Calls = nil
+	if err := StatsTop(bot, testContext(bot, "/stats blesstime", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (blesstime): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 ||
+		!strings.Contains(texts[0], "Топ-10 по времени в блесинге за всё время") ||
+		!strings.Contains(texts[0], "1. Тест - 1 минута 30 секунд") {
+		t.Errorf("StatsTop (blesstime) sent %q, want ranked durations", texts)
+	}
+
+	// Messages top.
+	client.Calls = nil
+	if err := StatsTop(bot, testContext(bot, "/stats messages", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (messages): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], "1. Тест - 125 сообщений") {
+		t.Errorf("StatsTop (messages) sent %q, want ranked message counts", texts)
+	}
+
+	// Words top shows the word itself from the dictionary.
+	client.Calls = nil
+	if err := StatsTop(bot, testContext(bot, "/stats words", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (words): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 ||
+		!strings.Contains(texts[0], "1. бляха - 10 раз") ||
+		!strings.Contains(texts[0], "2. сука - 5 раз") {
+		t.Errorf("StatsTop (words) sent %q, want ranked words", texts)
+	}
+
+	// Period filters: day counts only today, week sums the last 7 days and
+	// ignores the older seeded rows.
+	client.Calls = nil
+	today := GetStartOfDay()
+	DB.Create(&Stats{ContextID: 42, StatType: 3, DayTimestamp: today, Count: 7})
+	DB.Create(&Stats{ContextID: 42, StatType: 3, DayTimestamp: today - 3*86400, Count: 4})
+	if err := StatsTop(bot, testContext(bot, "/stats messages day", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (day): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 ||
+		!strings.Contains(texts[0], "за сутки") ||
+		!strings.Contains(texts[0], "1. Тест - 7 сообщений") {
+		t.Errorf("StatsTop (day) sent %q, want only today's counts", texts)
+	}
+	client.Calls = nil
+	if err := StatsTop(bot, testContext(bot, "/stats messages week", testUser(42))); err != nil {
+		t.Fatalf("StatsTop (week): %v", err)
+	}
+	texts = client.sentTexts()
+	if len(texts) != 1 ||
+		!strings.Contains(texts[0], "за неделю") ||
+		!strings.Contains(texts[0], "1. Тест - 11 сообщений") {
+		t.Errorf("StatsTop (week) sent %q, want the last 7 days summed", texts)
+	}
+}
+
 func TestMe(t *testing.T) {
 	bot, client := setupTestEnv(t)
 
@@ -462,7 +593,7 @@ func TestRussianPlurals(t *testing.T) {
 	}
 }
 
-// TestFormatDuration covers the mute-time formatting of /mutetop: units are
+// TestFormatDuration covers the mute-time formatting of /stats mutetime: units are
 // declined and zero units are dropped.
 func TestFormatDuration(t *testing.T) {
 	cases := []struct {

@@ -322,16 +322,23 @@ func seedUser(id int64, username, firstName string) {
 	}
 }
 
+// statTotal sums the stats rows of a stat type for one context (user id,
+// message id or word id), 0 when there are none.
+func statTotal(t *testing.T, statType int64, contextID int64) int64 {
+	t.Helper()
+	var total int64
+	if err := DB.Model(&Stats{}).Where("stat_type = ? AND context_id = ?", statType, contextID).
+		Select("COALESCE(SUM(count), 0)").Scan(&total).Error; err != nil {
+		t.Fatalf("statTotal(%v, %v): %v", statType, contextID, err)
+	}
+	return total
+}
+
 // muteSeconds sums the stat type 7 (mute time in seconds) rows of a user,
 // 0 when the user has never been muted.
 func muteSeconds(t *testing.T, userID int64) int64 {
 	t.Helper()
-	var total int64
-	if err := DB.Model(&Stats{}).Where("stat_type = 7 AND context_id = ?", userID).
-		Select("COALESCE(SUM(count), 0)").Scan(&total).Error; err != nil {
-		t.Fatalf("muteSeconds(%v): %v", userID, err)
-	}
-	return total
+	return statTotal(t, 7, userID)
 }
 
 // minutesRE matches a count written out with the declined minute noun,

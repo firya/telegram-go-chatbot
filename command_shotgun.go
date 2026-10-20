@@ -60,6 +60,9 @@ func Shotgun(bot *gotgbot.Bot, context *ext.Context) error {
 		DB.Clauses(clause.OnConflict{
 			UpdateAll: true,
 		}).Create(&duelist)
+		// Deaths are duplicated into the stats (stat type 8) so /stats tops
+		// can rank them per day.
+		statsAdd(8, GetStartOfDay(), victim.Id, 1)
 		duration := 1
 		prependText := ""
 		if victim.IsPremium {
