@@ -7,7 +7,7 @@ self-hosted Bot API server supported) and additionally uses an MTProto client fo
 State is kept in PostgreSQL.
 
 - 90 commands registered in `main.go` (some of them are aliases of the same function)
-- 93 `.go` source files, 153 tests in 23 files
+- 93 `.go` source files, 154 tests in 23 files
 - GitHub Actions: build + deploy on a self-hosted runner, image publishing to `ghcr.io`
 - License — MIT
 - Since 16.10.2026 development is driven by AI — models of the local Strata stack (`swift-1.5-iq3_xxs`,
@@ -252,7 +252,8 @@ assets/              sticker PNGs (go:embed) and CREDITS.md about their licensin
   Bot API and MTProto calls do not use it.
 - `/restart` calls `os.Exit(0)` — the restart must be handled by an external supervisor (`Restart=always`
   in systemd, `restart: always` in compose).
-- The dispatcher sends handler errors to the chat ("Ошибка: …"), a token in the text is replaced with
+- The dispatcher sends handler errors to the chat ("Ошибка: …" plus the context: the command
+  text, the user and the chat), a token in the text is replaced with
   `TOKEN`.
 - The AI commands (`/ai`, `/restartai`, `/setaisystem`) are commented out in `main.go`.
 

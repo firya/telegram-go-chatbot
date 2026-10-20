@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"math/rand"
 	"os/exec"
 	"strings"
@@ -35,11 +36,12 @@ func BotInit() error {
 	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{
 		// If an error is returned by a handler, log it and continue going.
 		Error: func(bot *gotgbot.Bot, context *ext.Context, err error) ext.DispatcherAction {
-			reportErr := Reply("Ошибка: "+strings.ReplaceAll(err.Error(), Config.Token, "TOKEN"), *context)
+			details := updateContext(context)
+			reportErr := Reply("Ошибка: "+strings.ReplaceAll(err.Error(), Config.Token, "TOKEN")+"\n\n"+details, *context)
 			if reportErr != nil {
 				Logger.Error("error when reporting a... error: " + reportErr.Error())
 			}
-			Logger.Error("an error occurred while handling update: " + err.Error())
+			Logger.Error("an error occurred while handling update: " + err.Error() + " | " + strings.ReplaceAll(details, "\n", " "))
 			return ext.DispatcherActionNoop
 		},
 		Logger:      Logger,
@@ -136,6 +138,36 @@ func ErrorReporting(err error) {
 	// The notice itself is not reported: SysAdminReply answers through the same
 	// Bot, so a failure here would feed ErrorReporting its own error.
 	SysAdminReply(strings.ReplaceAll(err.Error(), Config.Token, "TOKEN"))
+}
+
+// updateContext describes the update a handler failed on: the command text
+// with its arguments, the sender and the chat, so an error report says what
+// triggered it. The text is HTML escaped: reports go in HTML parse mode.
+func updateContext(context *ext.Context) string {
+	if context == nil {
+		return "Update: неизвестно чего"
+	}
+	text := context.GetType()
+	switch {
+	case context.Message != nil:
+		if context.Message.Text != "" {
+			text = context.Message.Text
+		} else {
+			text = fmt.Sprintf("сообщение #%v без текста", context.Message.MessageId)
+		}
+	case context.CallbackQuery != nil:
+		text = "callback: " + context.CallbackQuery.Data
+	case context.InlineQuery != nil:
+		text = "inline: " + context.InlineQuery.Query
+	}
+	details := fmt.Sprintf("Update: <code>%v</code>", html.EscapeString(text))
+	if context.EffectiveUser != nil {
+		details += fmt.Sprintf("\nЮзер: %v (%v)", MentionUser(context.EffectiveUser), context.EffectiveUser.Id)
+	}
+	if context.EffectiveChat != nil && context.EffectiveChat.Id != 0 {
+		details += fmt.Sprintf("\nЧат: %v", context.EffectiveChat.Id)
+	}
+	return details
 }
 
 func ytdlpGetVer() string {

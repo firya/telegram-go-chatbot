@@ -410,6 +410,42 @@ func TestErrorReporting(t *testing.T) {
 	}
 }
 
+// TestUpdateContext covers the error-report footer: the command text with its
+// arguments, the sender and the chat, HTML escaped so the report sends.
+func TestUpdateContext(t *testing.T) {
+	bot, _ := setupTestEnv(t)
+
+	// Message with arguments: text, sender mention and chat id, markup
+	// escaped.
+	got := updateContext(testContext(bot, "/mp3 https://youtu.be/x <b>", testUser(42)))
+	if !strings.Contains(got, "/mp3 https://youtu.be/x &lt;b&gt;") ||
+		!strings.Contains(got, "Юзер: <a href=\"tg://user?id=42\">Тест") ||
+		!strings.Contains(got, "Чат: -100") {
+		t.Errorf("updateContext (message) = %q, want command, user and chat", got)
+	}
+
+	// Message without text falls back to its id.
+	if got := updateContext(testContext(bot, "", testUser(42))); !strings.Contains(got, "сообщение #100 без текста") {
+		t.Errorf("updateContext (no text) = %q, want the message id fallback", got)
+	}
+
+	// Callbacks and inline queries show their payload.
+	msg := testMessage("duel", testUser(777))
+	cb := ext.NewContext(bot, &gotgbot.Update{UpdateId: 1, CallbackQuery: &gotgbot.CallbackQuery{Id: "1", From: *testUser(42), Message: *msg, Data: "duel_accept"}}, nil)
+	if got := updateContext(cb); !strings.Contains(got, "callback: duel_accept") {
+		t.Errorf("updateContext (callback) = %q, want the callback data", got)
+	}
+	iq := testInlineContext(bot, testUser(42), "привет")
+	if got := updateContext(iq); !strings.Contains(got, "inline: привет") {
+		t.Errorf("updateContext (inline) = %q, want the inline query", got)
+	}
+
+	// Without a context there is nothing to describe.
+	if got := updateContext(nil); !strings.Contains(got, "неизвестно") {
+		t.Errorf("updateContext (nil) = %q, want the unknown fallback", got)
+	}
+}
+
 // TestYtdlpGetVer reports the version line of the installed yt-dlp, and
 // "Unknown" when the binary is not on the machine — the answer /debug shows
 // then. The version itself is not pinned, only its shape.
